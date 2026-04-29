@@ -1,0 +1,36 @@
+version: "3.8"
+
+services:
+  # -------------------------
+  # PostgreSQL (Windows laptop: 192.168.1.201)
+  # -------------------------
+  # NOTE: NOT running in Docker, just external DB
+
+  # -------------------------
+  # Go Backend
+  # -------------------------
+  backend:
+    build: ./backend
+    container_name: go-backend
+    restart: always
+    ports:
+      - "8080:8080"
+    environment:
+      DB_HOST: 192.168.1.201
+      DB_PORT: 5432
+    env_file:
+      - ./backend/.env
+
+  # -------------------------
+  # React Frontend
+  # -------------------------
+  frontend:
+    build: ./frontend
+    container_name: react-frontend
+    restart: always
+    ports:
+      - "80:80"
+    environment:
+      REACT_APP_API_URL: http://192.168.1.14:8080/api/v1
+    depends_on:
+      - backend
