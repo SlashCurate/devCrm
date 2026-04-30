@@ -428,6 +428,7 @@ export interface User {
   username: string;
   email: string;
   role: string;
+  role_name: string;
   phone: string;
   college_id?: number;
   is_active: boolean;

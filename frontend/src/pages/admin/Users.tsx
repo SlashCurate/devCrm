@@ -86,7 +86,7 @@ export default function AdminUsers() {
           <table className="w-full text-sm">
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
-                {["#","Username","Email","Role","Phone","Status","Actions"]
+                {["#","Username","Email","Role","Status","Actions"]
                   .map((h) => (
                   <th key={h}
                     className="text-left px-4 py-3 text-xs font-semibold
@@ -109,7 +109,7 @@ export default function AdminUsers() {
                       {u.role_name?.replace(/_/g, " ") || "—"}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-gray-500">{u.phone || "—"}</td>
+                  
                   <td className="px-4 py-3">
                     <StatusBadge status={u.is_active ? "active" : "inactive"} />
                   </td>
@@ -146,16 +146,8 @@ export default function AdminUsers() {
                 placeholder="john_finance"
               />
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Phone
-              </label>
-              <input
-                {...register("phone")}
-                className="input-field"
-                placeholder="9876543210"
-              />
-            </div>
+          
+              
           </div>
 
           <div>

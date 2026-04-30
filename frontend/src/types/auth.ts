@@ -13,13 +13,16 @@ export type UserRole =
   | 'hostel_warden';
 
 export interface User {
-  id: string;
+  id: string; // UUID
   username: string;
   email: string;
+  password?: string; // Only for creation
   role_id: number;
-  role_name: string;
   is_active: boolean;
   is_verified: boolean;
+  last_login?: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface LoginCredentials {

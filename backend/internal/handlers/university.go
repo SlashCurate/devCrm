@@ -102,16 +102,21 @@ for _, u := range users {
 // ==================== TOGGLE USER ACTIVE ====================
 func ToggleUserActive(w http.ResponseWriter, r *http.Request) {
 	id := mux.Vars(r)["id"]
+
 	var user models.User
-	if err := db.DB.First(&user, id).Error; err != nil {
+
+	if err := db.DB.Where("id = ?", id).First(&user).Error; err != nil {
 		utils.ErrorResponse(w, http.StatusNotFound, "User not found")
 		return
 	}
+
 	db.DB.Model(&user).Update("is_active", !user.IsActive)
-	status := "activated"
+
+	status := "deactivated"
 	if !user.IsActive {
-		status = "deactivated"
+		status = "activated"
 	}
+
 	utils.JSONResponse(w, http.StatusOK, true, "User "+status, nil)
 }
 
