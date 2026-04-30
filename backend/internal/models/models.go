@@ -121,6 +121,7 @@ type User struct {
 	// Relations
 	Notifications []Notification
 	Sessions      []UserSession
+	Role   Role `gorm:"foreignKey:RoleID;references:ID"`
 }
 
 func (User) TableName() string {

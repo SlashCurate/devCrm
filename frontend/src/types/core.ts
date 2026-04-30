@@ -40,6 +40,7 @@ export interface College {
   is_active: boolean;
   created_at?: string;
   updated_at?: string;
+  about?: string;
   // Relations
   departments?: Department[];
   programs?: Program[];

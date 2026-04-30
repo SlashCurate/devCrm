@@ -106,7 +106,7 @@ export default function AdminUsers() {
                   <td className="px-4 py-3 text-gray-500">{u.email}</td>
                   <td className="px-4 py-3">
                     <span className="badge-info">
-                      {u.role?.replace(/_/g, " ") || "—"}
+                      {u.role_name?.replace(/_/g, " ") || "—"}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-gray-500">{u.phone || "—"}</td>

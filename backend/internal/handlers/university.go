@@ -71,23 +71,31 @@ func CreateUser(w http.ResponseWriter, r *http.Request) {
 // ==================== LIST ALL USERS ====================
 func ListUsers(w http.ResponseWriter, r *http.Request) {
 	var users []models.User
-	db.DB.Preload("College").Find(&users)
+	db.DB.Preload("Role").Find(&users)
 
 	// Remove passwords from response
-	type SafeUser struct {
-		ID       string `json:"id"`
-		Username string `json:"username"`
-		Email    string `json:"email"`
-		RoleID   uint   `json:"role_id"`
-		IsActive bool   `json:"is_active"`
-	}
-	var safeUsers []SafeUser
-	for _, u := range users {
-		safeUsers = append(safeUsers, SafeUser{
-			ID: u.ID, Username: u.Username, Email: u.Email,
-			RoleID: u.RoleID, IsActive: u.IsActive,
-		})
-	}
+type SafeUser struct {
+	ID         string `json:"id"`
+	Username   string `json:"username"`
+	Email      string `json:"email"`
+	RoleID     uint   `json:"role_id"`
+	RoleName   string `json:"role_name"`
+	IsActive   bool   `json:"is_active"`
+	IsVerified bool   `json:"is_verified"`
+}
+var safeUsers []SafeUser
+
+for _, u := range users {
+	safeUsers = append(safeUsers, SafeUser{
+		ID:         u.ID,
+		Username:   u.Username,
+		Email:      u.Email,
+		RoleID:     u.RoleID,
+		RoleName:   u.Role.RoleName, // from Preload("Role")
+		IsActive:   u.IsActive,
+		IsVerified: u.IsVerified,
+	})
+}
 	utils.JSONResponse(w, http.StatusOK, true, "Users fetched", safeUsers)
 }
 
