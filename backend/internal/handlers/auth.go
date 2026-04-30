@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"encoding/json"
-	"log"
 	"net/http"
 	"time"
 	"university-erp-backend/internal/db"
@@ -38,14 +37,31 @@ func Login(w http.ResponseWriter, r *http.Request) {
 	// Get role name from Role table
 	var role models.Role
 	roleName := "student"
-	log.Printf("[Login] User: %s | RoleID from DB: %d", user.Email, user.RoleID)
+	var collegeID *uint
+
 	if err := db.DB.First(&role, user.RoleID).Error; err == nil {
 		roleName = role.RoleName
-		log.Printf("[Login] Role found: %s (ID: %d)", roleName, role.ID)
-	} else {
-		log.Printf("[Login] Role lookup FAILED for RoleID %d: %v", user.RoleID, err)
 	}
-	token, err := utils.GenerateToken(user.ID, user.Email, roleName, nil)
+
+	// Fetch CollegeID based on role for the JWT
+	if roleName == models.RoleCollegeAdmin {
+		var ca models.CollegeAdmin
+		if err := db.DB.Where("user_id = ?", user.ID).First(&ca).Error; err == nil {
+			collegeID = &ca.CollegeID
+		}
+	} else if roleName == models.RoleStudent {
+		var st models.Student
+		if err := db.DB.Preload("Program.Department").Where("user_id = ?", user.ID).First(&st).Error; err == nil && st.Program != nil {
+			collegeID = &st.Program.Department.CollegeID
+		}
+	} else if roleName == models.RoleFaculty {
+		var fa models.Faculty
+		if err := db.DB.Preload("Department").Where("user_id = ?", user.ID).First(&fa).Error; err == nil && fa.DepartmentID != nil {
+			collegeID = &fa.Department.CollegeID
+		}
+	}
+
+	token, err := utils.GenerateToken(user.ID, user.Email, roleName, collegeID)
 	if err != nil {
 		utils.ErrorResponse(w, http.StatusInternalServerError, "Failed to generate token")
 		return
@@ -65,59 +81,9 @@ func Login(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// ==================== REGISTER STUDENT (PUBLIC) ====================
+// RegisterStudent is no longer used for public applications. Use Apply public route instead.
 func RegisterStudent(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Username  string `json:"username"`
-		Email     string `json:"email"`
-		Password  string `json:"password"`
-		Phone     string `json:"phone"`
-		FirstName string `json:"first_name"`
-		LastName  string `json:"last_name"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		utils.ErrorResponse(w, http.StatusBadRequest, "Invalid request body")
-		return
-	}
-
-	// Check duplicate
-	var existing models.User
-	if err := db.DB.Where("email = ? OR username = ?", req.Email, req.Username).First(&existing).Error; err == nil {
-		utils.ErrorResponse(w, http.StatusConflict, "Email or username already exists")
-		return
-	}
-
-	hashed, err := bcrypt.GenerateFromPassword([]byte(req.Password), 14)
-	if err != nil {
-		utils.ErrorResponse(w, http.StatusInternalServerError, "Failed to hash password")
-		return
-	}
-
-	user := models.User{
-		Username:     req.Username,
-		Email:        req.Email,
-		PasswordHash: string(hashed),
-		RoleID:       6, // student role
-		IsActive:     true,
-	}
-	if err := db.DB.Create(&user).Error; err != nil {
-		utils.ErrorResponse(w, http.StatusInternalServerError, "Failed to create user")
-		return
-	}
-
-	// Create student profile
-	student := models.Student{
-		UserID:    user.ID,
-		FirstName: req.FirstName,
-		LastName:  req.LastName,
-		Phone:     req.Phone,
-	}
-	db.DB.Create(&student)
-
-	utils.JSONResponse(w, http.StatusCreated, true, "Student registered successfully", map[string]interface{}{
-		"user_id":    user.ID,
-		"student_id": student.ID,
-	})
+	utils.ErrorResponse(w, http.StatusForbidden, "Use the public application portal to apply.")
 }
 
 // ==================== FORGOT PASSWORD ====================
@@ -194,12 +160,38 @@ func GetProfile(w http.ResponseWriter, r *http.Request) {
 	claims := middleware.GetClaims(r)
 
 	var user models.User
-	if err := db.DB.Preload("College").First(&user, claims.UserID).Error; err != nil {
+	if err := db.DB.First(&user, "id = ?", claims.UserID).Error; err != nil {
 		utils.ErrorResponse(w, http.StatusNotFound, "User not found")
 		return
 	}
 
-	utils.JSONResponse(w, http.StatusOK, true, "Profile fetched", user)
+	var profile interface{}
+
+	switch claims.Role {
+	case models.RoleStudent:
+		var st models.Student
+		db.DB.Preload("Program.Department.College").Where("user_id = ?", claims.UserID).First(&st)
+		profile = st
+	case models.RoleFaculty:
+		var fa models.Faculty
+		db.DB.Preload("Department.College").Where("user_id = ?", claims.UserID).First(&fa)
+		profile = fa
+	case models.RoleUniversityAdmin:
+		var ua models.UniversityAdmin
+		db.DB.Preload("University").Where("user_id = ?", claims.UserID).First(&ua)
+		profile = ua
+	case models.RoleCollegeAdmin:
+		var ca models.CollegeAdmin
+		db.DB.Preload("College").Where("user_id = ?", claims.UserID).First(&ca)
+		profile = ca
+	default:
+		profile = user
+	}
+
+	utils.JSONResponse(w, http.StatusOK, true, "Profile fetched", map[string]interface{}{
+		"user":    user,
+		"profile": profile,
+	})
 }
 
 // ==================== CHANGE PASSWORD ====================

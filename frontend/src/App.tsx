@@ -56,6 +56,8 @@ import StudentTimetable  from "./pages/student/Timetable";
 import StudentAttendance from "./pages/student/Attendance";
 import StudentLibrary    from "./pages/student/Library";
 import StudentEvents     from "./pages/student/Events";
+import StudentProfile    from "./pages/student/Profile";
+import ApplicationStatus from "./pages/student/ApplicationStatus";
 
 // Shared
 import Notifications from "./pages/Notifications";
@@ -108,8 +110,10 @@ function AppRoutes() {
       {/* Public */}
       <Route path="/login"           element={<Login />} />
       <Route path="/register"        element={<Register />} />
-      <Route path="/student/apply"   element={<Apply />} />
-      <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route path="/apply"              element={<Apply />} />
+      <Route path="/application-status" element={<ApplicationStatus />} />
+      <Route path="/auth/application-status" element={<ApplicationStatus />} />
+      <Route path="/forgot-password"    element={<ForgotPassword />} />
       <Route path="/reset-password"  element={<ResetPassword />} />
 
       {/* Root redirect */}
@@ -279,7 +283,11 @@ function AppRoutes() {
           <StudentDashboard />
         </ProtectedRoute>
       } />
-     
+      <Route path="/student/profile" element={
+        <ProtectedRoute roleIds={studentRoles}>
+          <StudentProfile />
+        </ProtectedRoute>
+      } />
       <Route path="/student/applications" element={
         <ProtectedRoute roleIds={studentRoles}>
           <MyApplications />

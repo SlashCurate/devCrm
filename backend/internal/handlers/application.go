@@ -2,6 +2,8 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
+	"math/rand"
 	"net/http"
 	"time"
 	"university-erp-backend/internal/db"
@@ -10,111 +12,57 @@ import (
 	"university-erp-backend/internal/utils"
 
 	"github.com/gorilla/mux"
+	"golang.org/x/crypto/bcrypt"
 )
 
-// ==================== SUBMIT APPLICATION ====================
-func SubmitApplication(w http.ResponseWriter, r *http.Request) {
-	claims := middleware.GetClaims(r)
-
-	var req struct {
-		ProgramID      uint       `json:"program_id"`
-		CollegeID      uint       `json:"college_id"`
-		FirstName      string     `json:"first_name"`
-		LastName       string     `json:"last_name"`
-		DOB            *time.Time `json:"dob"`
-		Gender         string     `json:"gender"`
-		Phone          string     `json:"phone"`
-		Email          string     `json:"email"`
-		Address        string     `json:"address"`
-		City           string     `json:"city"`
-		State          string     `json:"state"`
-		PinCode        string     `json:"pin_code"`
-		PreviousSchool string     `json:"previous_school"`
-		PreviousGrade  string     `json:"previous_grade"`
-		Statement      string     `json:"statement"`
-	}
+// ==================== PUBLIC: SUBMIT APPLICATION ====================
+func PublicSubmitApplication(w http.ResponseWriter, r *http.Request) {
+	var req models.Applicant
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		utils.ErrorResponse(w, http.StatusBadRequest, "Invalid request body")
 		return
 	}
 
-	// Find student profile
-	var student models.Student
-	if err := db.DB.Where("user_id = ?", claims.UserID).First(&student).Error; err != nil {
-		utils.ErrorResponse(w, http.StatusNotFound, "Student profile not found")
-		return
-	}
-
-	// Check if already applied for this course
-	var existingApp models.Application
-	if err := db.DB.Where("student_id = ? AND program_id = ?", student.ID, req.ProgramID).
-		First(&existingApp).Error; err == nil {
-		utils.ErrorResponse(w, http.StatusConflict, "You have already applied for this program")
-		return
-	}
+	// Generate Application ID (APP-YYYY-XXXX)
+	year := time.Now().Year()
+	randSuffix := rand.Intn(9000) + 1000 // 4 digits
+	appID := fmt.Sprintf("APP-%d-%04d", year, randSuffix)
 
 	now := time.Now()
-	app := models.Application{
-		StudentID:      student.ID,
-		ProgramID:      req.ProgramID,
-		CollegeID:      &req.CollegeID,
-		Status:         models.ApplicationSubmitted,
-		FirstName:      req.FirstName,
-		LastName:       req.LastName,
-		DOB:            req.DOB,
-		Gender:         req.Gender,
-		Phone:          req.Phone,
-		Email:          req.Email,
-		Address:        req.Address,
-		City:           req.City,
-		State:          req.State,
-		Pincode:        req.PinCode,
-		PreviousSchool: req.PreviousSchool,
-		PreviousGrade:  req.PreviousGrade,
-		Statement:      req.Statement,
-		SubmittedAt:    &now,
-	}
+	req.ApplicationID = appID
+	req.Status = "submitted"
+	req.SubmittedAt = &now
 
-	if err := db.DB.Create(&app).Error; err != nil {
+	if err := db.DB.Create(&req).Error; err != nil {
 		utils.ErrorResponse(w, http.StatusInternalServerError, "Failed to submit application")
 		return
 	}
 
-	// Update student profile
-	db.DB.Model(&student).Updates(map[string]interface{}{
-		"first_name": req.FirstName, "last_name": req.LastName,
-		"dob": req.DOB, "gender": req.Gender, "phone": req.Phone,
-		"address": req.Address, "city": req.City, "state": req.State, "pin_code": req.PinCode,
-		"previous_school": req.PreviousSchool, "previous_grade": req.PreviousGrade,
-		"program_id": req.ProgramID, "college_id": req.CollegeID, "status": "applied",
-	})
+	// Notify admins (if real-time is set up) or email student
+	go utils.SendNotificationEmail(req.Email, "Application Submitted successfully", "Your application ID is: "+appID)
 
-	// Notify student
-	db.DB.Create(&models.Notification{
-		UserID:  claims.UserID,
-		Title:   "Application Submitted",
-		Message: "Your application has been submitted successfully and is under review.",
-		Type:    "success",
+	utils.JSONResponse(w, http.StatusCreated, true, "Application submitted successfully", map[string]interface{}{
+		"application_id": appID,
 	})
-
-	utils.JSONResponse(w, http.StatusCreated, true, "Application submitted successfully", app)
 }
 
-// ==================== GET MY APPLICATIONS (Student) ====================
-func GetMyApplications(w http.ResponseWriter, r *http.Request) {
-	claims := middleware.GetClaims(r)
+// ==================== PUBLIC: CHECK STATUS ====================
+func PublicCheckApplicationStatus(w http.ResponseWriter, r *http.Request) {
+	appID := r.URL.Query().Get("application_id")
+	email := r.URL.Query().Get("email")
 
-	var student models.Student
-	if err := db.DB.Where("user_id = ?", claims.UserID).First(&student).Error; err != nil {
-		utils.ErrorResponse(w, http.StatusNotFound, "Student profile not found")
+	if appID == "" || email == "" {
+		utils.ErrorResponse(w, http.StatusBadRequest, "Application ID and Email are required")
 		return
 	}
 
-	var applications []models.Application
-	db.DB.Preload("Program").Preload("College").Preload("Documents").
-		Where("student_id = ?", student.ID).Find(&applications)
+	var applicant models.Applicant
+	if err := db.DB.Preload("Program").Preload("College").Where("application_id = ? AND email = ?", appID, email).First(&applicant).Error; err != nil {
+		utils.ErrorResponse(w, http.StatusNotFound, "Application not found or email mismatch")
+		return
+	}
 
-	utils.JSONResponse(w, http.StatusOK, true, "Applications fetched", applications)
+	utils.JSONResponse(w, http.StatusOK, true, "Application status fetched", applicant)
 }
 
 // ==================== GET ALL APPLICATIONS (Admin/College Admin) ====================
@@ -122,7 +70,7 @@ func GetAllApplications(w http.ResponseWriter, r *http.Request) {
 	claims := middleware.GetClaims(r)
 	status := r.URL.Query().Get("status")
 
-	query := db.DB.Preload("Student.User").Preload("Program").Preload("College")
+	query := db.DB.Preload("Program").Preload("College")
 
 	if claims.Role == models.RoleCollegeAdmin && claims.CollegeID != nil {
 		query = query.Where("college_id = ?", *claims.CollegeID)
@@ -131,202 +79,153 @@ func GetAllApplications(w http.ResponseWriter, r *http.Request) {
 		query = query.Where("status = ?", status)
 	}
 
-	var applications []models.Application
-	query.Find(&applications)
-	utils.JSONResponse(w, http.StatusOK, true, "Applications fetched", applications)
+	var applicants []models.Applicant
+	query.Order("created_at desc").Find(&applicants)
+	utils.JSONResponse(w, http.StatusOK, true, "Applications fetched", applicants)
 }
 
-// ==================== REVIEW APPLICATION ====================
-func ReviewApplication(w http.ResponseWriter, r *http.Request) {
+// ==================== SHORTLIST APPLICATION (University Admin) ====================
+func ShortlistApplication(w http.ResponseWriter, r *http.Request) {
 	claims := middleware.GetClaims(r)
-	id := mux.Vars(r)["id"]
+	id := mux.Vars(r)["id"] // Applicant ID
 
-	var req struct {
-		Status          string `json:"status"` // shortlisted, rejected, under_review
-		RejectionReason string `json:"rejection_reason"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		utils.ErrorResponse(w, http.StatusBadRequest, "Invalid request body")
-		return
-	}
-
-	var app models.Application
-	if err := db.DB.Preload("Student").First(&app, id).Error; err != nil {
+	var app models.Applicant
+	if err := db.DB.First(&app, id).Error; err != nil {
 		utils.ErrorResponse(w, http.StatusNotFound, "Application not found")
 		return
 	}
 
 	now := time.Now()
-	updates := map[string]interface{}{
-		"status":      req.Status,
-		"reviewed_by": claims.UserID,
-		"reviewed_at": now,
-	}
+	db.DB.Model(&app).Updates(map[string]interface{}{
+		"status":         "shortlisted",
+		"reviewed_by":    claims.UserID,
+		"reviewed_at":    now,
+		"shortlisted_at": now,
+	})
 
-	if req.Status == models.ApplicationRejected {
-		updates["rejection_reason"] = req.RejectionReason
-	}
-	if req.Status == models.ApplicationShortlisted {
-		updates["shortlisted_at"] = now
-		// Update student status
-		db.DB.Model(&models.Student{}).Where("id = ?", app.StudentID).Update("status", "shortlisted")
-		// Notify student
-		db.DB.Create(&models.Notification{
-			UserID:  app.Student.UserID,
-			Title:   "Application Shortlisted! 🎉",
-			Message: "Congratulations! Your application has been shortlisted. Please visit the college to submit your documents.",
-			Type:    "success",
-		})
-		go utils.SendNotificationEmail(app.Email, "Application Shortlisted!", "Your application has been shortlisted. Please visit the college to submit your documents.")
-	}
+	go utils.SendNotificationEmail(app.Email, "Application Shortlisted! 🎉", "Congratulations! Your application has been shortlisted. Please visit the college to submit your documents.")
 
-	if req.Status == models.ApplicationRejected {
-		db.DB.Create(&models.Notification{
-			UserID:  app.Student.UserID,
-			Title:   "Application Status Update",
-			Message: "Your application status has been updated. Reason: " + req.RejectionReason,
-			Type:    "warning",
-		})
-	}
-
-	db.DB.Model(&app).Updates(updates)
-	utils.JSONResponse(w, http.StatusOK, true, "Application reviewed", app)
+	utils.JSONResponse(w, http.StatusOK, true, "Application shortlisted", app)
 }
 
-// ==================== ENROLL STUDENT (Generate Enrollment Number) ====================
-func EnrollStudent(w http.ResponseWriter, r *http.Request) {
-	id := mux.Vars(r)["id"] // application ID
+// ==================== REJECT APPLICATION (University/College Admin) ====================
+func RejectApplication(w http.ResponseWriter, r *http.Request) {
+	claims := middleware.GetClaims(r)
+	id := mux.Vars(r)["id"]
 
-	var app models.Application
-	if err := db.DB.Preload("Student").First(&app, id).Error; err != nil {
+	var req struct {
+		Reason string `json:"reason"`
+	}
+	json.NewDecoder(r.Body).Decode(&req)
+
+	var app models.Applicant
+	if err := db.DB.First(&app, id).Error; err != nil {
 		utils.ErrorResponse(w, http.StatusNotFound, "Application not found")
 		return
 	}
 
-	if app.Status != models.ApplicationShortlisted {
+	now := time.Now()
+	db.DB.Model(&app).Updates(map[string]interface{}{
+		"status":           "rejected",
+		"reviewed_by":      claims.UserID,
+		"reviewed_at":      now,
+		"rejection_reason": req.Reason,
+	})
+
+	go utils.SendNotificationEmail(app.Email, "Application Status Update", "Your application status has been updated. Reason: "+req.Reason)
+
+	utils.JSONResponse(w, http.StatusOK, true, "Application rejected", app)
+}
+
+// ==================== ENROLL STUDENT (College Admin) ====================
+func EnrollStudent(w http.ResponseWriter, r *http.Request) {
+	id := mux.Vars(r)["id"] // Applicant ID
+
+	var app models.Applicant
+	if err := db.DB.Preload("Program.Department").First(&app, id).Error; err != nil {
+		utils.ErrorResponse(w, http.StatusNotFound, "Application not found")
+		return
+	}
+
+	if app.Status != "shortlisted" {
 		utils.ErrorResponse(w, http.StatusBadRequest, "Only shortlisted applications can be enrolled")
 		return
 	}
 
+	// 1. Generate username and password
 	enrollmentNum := utils.GenerateEnrollmentNumber()
+	password := "Student@123"
+	hashed, _ := bcrypt.GenerateFromPassword([]byte(password), 10)
+
+	// 2. Create User account
+	var role models.Role
+	db.DB.Where("role_name = ?", models.RoleStudent).First(&role)
+
+	user := models.User{
+		Username:     enrollmentNum,
+		Email:        app.Email,
+		PasswordHash: string(hashed),
+		RoleID:       role.ID,
+		IsActive:     true,
+	}
+
+	tx := db.DB.Begin()
+
+	if err := tx.Create(&user).Error; err != nil {
+		tx.Rollback()
+		utils.ErrorResponse(w, http.StatusInternalServerError, "Failed to create user account")
+		return
+	}
+
+	// 3. Create Student record
+	student := models.Student{
+		UserID:          user.ID,
+		ProgramID:       &app.ProgramID,
+		RollNumber:      enrollmentNum,
+		UniversityRegNo: "REG" + enrollmentNum,
+		FirstName:       app.FirstName,
+		LastName:        app.LastName,
+		PersonalEmail:   app.Email,
+		Phone:           app.Phone,
+		Gender:          app.Gender,
+		DOB:             app.DOB,
+		Category:        app.Category,
+		City:            app.City,
+		State:           app.State,
+		Pincode:         app.Pincode,
+		Address:         app.Address,
+		AdmissionYear:   time.Now().Year(),
+		CurrentSemester: 1,
+		IsActive:        true,
+	}
+
+	if err := tx.Create(&student).Error; err != nil {
+		tx.Rollback()
+		utils.ErrorResponse(w, http.StatusInternalServerError, "Failed to create student profile")
+		return
+	}
+
+	// 4. Update Applicant
 	now := time.Now()
-
-	// Update application
-	db.DB.Model(&app).Updates(map[string]interface{}{
-		"status":      models.ApplicationEnrolled,
+	if err := tx.Model(&app).Updates(map[string]interface{}{
+		"status":      "enrolled",
 		"enrolled_at": now,
-	})
+		"student_id":  student.ID,
+	}).Error; err != nil {
+		tx.Rollback()
+		utils.ErrorResponse(w, http.StatusInternalServerError, "Failed to update applicant")
+		return
+	}
 
-	// Update student
-	db.DB.Model(&models.Student{}).Where("id = ?", app.StudentID).Updates(map[string]interface{}{
-		"status":            "enrolled",
-		"enrollment_number": enrollmentNum,
-		"enrollment_date":   now,
-	})
+	tx.Commit()
 
-	// Notify student
-	db.DB.Create(&models.Notification{
-		UserID:  app.Student.UserID,
-		Title:   "Enrollment Confirmed! 🎓",
-		Message: "Congratulations! You have been enrolled. Your Enrollment Number is: " + enrollmentNum,
-		Type:    "success",
-	})
-
-	go utils.SendNotificationEmail(app.Email, "Enrollment Confirmed!", "Your enrollment number is: "+enrollmentNum)
+	// 5. Notify student
+	msg := fmt.Sprintf("Congratulations! You have been enrolled.\nYour Username: %s\nPassword: %s\nPlease login to the student portal.", user.Username, password)
+	go utils.SendNotificationEmail(app.Email, "Enrollment Confirmed & Login Credentials 🎓", msg)
 
 	utils.JSONResponse(w, http.StatusOK, true, "Student enrolled successfully", map[string]interface{}{
 		"enrollment_number": enrollmentNum,
-		"application_id":    app.ID,
+		"username":          user.Username,
+		"password":          password, // Usually wouldn't return password, but requested for admin view
 	})
-}
-
-// ==================== UPLOAD DOCUMENT ====================
-func UploadDocument(w http.ResponseWriter, r *http.Request) {
-	claims := middleware.GetClaims(r)
-
-	var req struct {
-		ApplicationID *uint  `json:"application_id"`
-		DocumentType  string `json:"document_type"`
-		FileName      string `json:"file_name"`
-		FileURL       string `json:"file_url"`
-		FileSize      int64  `json:"file_size"`
-		MimeType      string `json:"mime_type"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		utils.ErrorResponse(w, http.StatusBadRequest, "Invalid request body")
-		return
-	}
-
-	var student models.Student
-	if err := db.DB.Where("user_id = ?", claims.UserID).First(&student).Error; err != nil {
-		utils.ErrorResponse(w, http.StatusNotFound, "Student not found")
-		return
-	}
-
-	doc := models.Document{
-		StudentID:     student.ID,
-		ApplicationID: req.ApplicationID,
-		DocumentType:  req.DocumentType,
-		FileName:      req.FileName,
-		FileURL:       req.FileURL,
-		FileSize:      req.FileSize,
-		MimeType:      req.MimeType,
-		IsVerified:    false,
-	}
-	if err := db.DB.Create(&doc).Error; err != nil {
-		utils.ErrorResponse(w, http.StatusInternalServerError, "Failed to upload document")
-		return
-	}
-	utils.JSONResponse(w, http.StatusCreated, true, "Document uploaded successfully", doc)
-}
-
-// ==================== VERIFY DOCUMENT (College Admin) ====================
-func VerifyDocument(w http.ResponseWriter, r *http.Request) {
-	claims := middleware.GetClaims(r)
-	id := mux.Vars(r)["id"]
-
-	var req struct {
-		IsVerified bool   `json:"is_verified"`
-		Remarks    string `json:"remarks"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		utils.ErrorResponse(w, http.StatusBadRequest, "Invalid request body")
-		return
-	}
-
-	var doc models.Document
-	if err := db.DB.First(&doc, id).Error; err != nil {
-		utils.ErrorResponse(w, http.StatusNotFound, "Document not found")
-		return
-	}
-
-	now := time.Now()
-	db.DB.Model(&doc).Updates(map[string]interface{}{
-		"is_verified": req.IsVerified,
-		"verified_by": claims.UserID,
-		"verified_at": now,
-		"remarks":     req.Remarks,
-	})
-
-	utils.JSONResponse(w, http.StatusOK, true, "Document verification updated", doc)
-}
-
-// ==================== GET DOCUMENTS (Student/Admin) ====================
-func GetDocuments(w http.ResponseWriter, r *http.Request) {
-	claims := middleware.GetClaims(r)
-
-	var docs []models.Document
-	query := db.DB
-
-	if claims.Role == models.RoleStudent {
-		var student models.Student
-		if err := db.DB.Where("user_id = ?", claims.UserID).First(&student).Error; err != nil {
-			utils.ErrorResponse(w, http.StatusNotFound, "Student not found")
-			return
-		}
-		query = query.Where("student_id = ?", student.ID)
-	}
-
-	query.Find(&docs)
-	utils.JSONResponse(w, http.StatusOK, true, "Documents fetched", docs)
 }

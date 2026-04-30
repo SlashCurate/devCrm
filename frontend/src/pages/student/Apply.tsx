@@ -6,7 +6,7 @@ import toast from "react-hot-toast";
 import { College, Course } from "../../types";
 import {
   GraduationCap, Send, CheckCircle,
-  User, BookOpen, Layers, FileText,
+  User, BookOpen, Layers, FileText, XCircle, Clock
 } from "lucide-react";
 
 interface ApplyForm {
@@ -41,6 +41,13 @@ export default function Apply() {
   const [loading,    setLoading]    = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [submitted,  setSubmitted]  = useState(false);
+
+  // Status Checker State
+  const [viewMode, setViewMode] = useState<"apply" | "status">("apply");
+  const [statusAppId, setStatusAppId] = useState("");
+  const [statusEmail, setStatusEmail] = useState("");
+  const [statusResult, setStatusResult] = useState<any>(null);
+  const [statusError, setStatusError] = useState("");
 
   const {
     register, handleSubmit, watch, trigger,
@@ -79,11 +86,12 @@ export default function Apply() {
   const onSubmit = async (data: ApplyForm) => {
     setSubmitting(true);
     try {
-      await api.post("/student/applications", {
+      await api.post("/auth/apply", {
         ...data,
-        course_id:  Number(data.course_id),
+        program_id: Number(data.course_id),
         college_id: Number(data.college_id),
         dob:        new Date(data.dob).toISOString(),
+        academic_year_id: 1, // Defaulting for demo purposes
       });
       setSubmitted(true);
       toast.success("Application submitted successfully!");
@@ -91,6 +99,18 @@ export default function Apply() {
       toast.error(err.response?.data?.error || "Submission failed");
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleCheckStatus = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setStatusError("");
+    setStatusResult(null);
+    try {
+      const res = await api.get(`/auth/application-status?application_id=${statusAppId}&email=${statusEmail}`);
+      setStatusResult(res.data.data);
+    } catch (err: any) {
+      setStatusError(err.response?.data?.error || "Application not found");
     }
   };
 
@@ -192,31 +212,130 @@ export default function Apply() {
           </div>
         </div>
 
-        {/* Sign in link */}
-        <Link
-          to="/login"
-          className="text-sm text-blue-200 hover:text-white
-                     transition-colors"
-        >
-          Already have an account?{" "}
-          <span className="text-white font-bold underline
-                           underline-offset-2">
+        <div className="flex items-center">
+          <Link
+            to="/login"
+            className="text-sm text-blue-200 hover:text-white
+                       transition-colors mr-4"
+          >
             Sign In
-          </span>
-        </Link>
+          </Link>
+          <button
+            onClick={() => setViewMode(viewMode === "apply" ? "status" : "apply")}
+            className="text-sm font-semibold text-white bg-primary-700 px-4 py-2 rounded-lg hover:bg-primary-600 transition-colors"
+          >
+            {viewMode === "apply" ? "Check Status" : "Apply Now"}
+          </button>
+        </div>
       </nav>
 
       {/* ── Title ── */}
       <div className="text-center py-6 px-4">
         <h1 className="text-3xl font-bold text-white">
-          Student Admission Application
+          {viewMode === "apply" ? "Student Admission Application" : "Check Application Status"}
         </h1>
         <p className="text-blue-200 mt-1 text-sm">
-          Complete all steps carefully • Takes about 5 minutes
+          {viewMode === "apply" ? "Complete all steps carefully • Takes about 5 minutes" : "Track your application progress"}
         </p>
       </div>
 
-      {/* ── Step Indicator ── */}
+      {viewMode === "status" && (
+        <div className="max-w-md mx-auto px-4 pb-16">
+          <div className="bg-white rounded-2xl shadow-2xl p-8">
+            <h2 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
+              <FileText className="w-5 h-5 text-primary-600" />
+              Application Tracker
+            </h2>
+            <form onSubmit={handleCheckStatus} className="space-y-4">
+              <div>
+                <label className="form-label">Application ID *</label>
+                <input
+                  type="text"
+                  required
+                  value={statusAppId}
+                  onChange={(e) => setStatusAppId(e.target.value)}
+                  className="input-field"
+                  placeholder="APP-2024-XXXX"
+                />
+              </div>
+              <div>
+                <label className="form-label">Email Address *</label>
+                <input
+                  type="email"
+                  required
+                  value={statusEmail}
+                  onChange={(e) => setStatusEmail(e.target.value)}
+                  className="input-field"
+                  placeholder="john@example.com"
+                />
+              </div>
+              <button type="submit" className="btn-primary w-full">Track Status</button>
+            </form>
+
+            {statusError && (
+              <div className="mt-6 p-4 bg-red-50 text-red-700 rounded-lg text-sm text-center">
+                {statusError}
+              </div>
+            )}
+
+            {statusResult && (
+              <div className="mt-8 pt-6 border-t">
+                <div className="text-center mb-6">
+                  <div className={`inline-flex items-center justify-center w-16 h-16 rounded-full mb-3 shadow-inner ${
+                    statusResult.Status === "enrolled" ? "bg-green-100 text-green-600" :
+                    statusResult.Status === "rejected" ? "bg-red-100 text-red-600" :
+                    statusResult.Status === "shortlisted" ? "bg-blue-100 text-blue-600" :
+                    "bg-yellow-100 text-yellow-600"
+                  }`}>
+                    {statusResult.Status === "enrolled" ? <CheckCircle className="w-8 h-8" /> :
+                     statusResult.Status === "rejected" ? <XCircle className="w-8 h-8" /> :
+                     <Clock className="w-8 h-8" />}
+                  </div>
+                  <h3 className="text-xl font-bold text-gray-900">
+                    Status: <span className="capitalize">{statusResult.Status.replace("_", " ")}</span>
+                  </h3>
+                </div>
+
+                <div className="space-y-3 text-sm">
+                  <div className="flex justify-between pb-2 border-b">
+                    <span className="text-gray-500">Applicant</span>
+                    <span className="font-semibold text-gray-900">{statusResult.FirstName} {statusResult.LastName}</span>
+                  </div>
+                  <div className="flex justify-between pb-2 border-b">
+                    <span className="text-gray-500">Program</span>
+                    <span className="font-semibold text-gray-900">{statusResult.Program?.name}</span>
+                  </div>
+                  <div className="flex justify-between pb-2 border-b">
+                    <span className="text-gray-500">College</span>
+                    <span className="font-semibold text-gray-900">{statusResult.College?.name}</span>
+                  </div>
+                  <div className="flex justify-between pb-2 border-b">
+                    <span className="text-gray-500">Applied On</span>
+                    <span className="font-semibold text-gray-900">
+                      {statusResult.SubmittedAt ? new Date(statusResult.SubmittedAt).toLocaleDateString() : "N/A"}
+                    </span>
+                  </div>
+                </div>
+
+                {statusResult.Remarks && (
+                  <div className="mt-4 p-3 bg-gray-50 rounded-lg text-sm text-gray-700">
+                    <strong>Remarks:</strong> {statusResult.Remarks}
+                  </div>
+                )}
+                {statusResult.RejectionReason && statusResult.Status === "rejected" && (
+                  <div className="mt-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm">
+                    <strong>Reason:</strong> {statusResult.RejectionReason}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {viewMode === "apply" && (
+        <>
+          {/* ── Step Indicator ── */}
       <div className="max-w-3xl mx-auto px-4 mb-8">
         <div className="flex items-center justify-between">
           {STEPS.map(({ label, icon: Icon }, i) => {
@@ -654,6 +773,8 @@ export default function Apply() {
           </div>
         </form>
       </div>
+      </>
+      )}
     </div>
   );
 }

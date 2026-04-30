@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"time"
 	"university-erp-backend/internal/db"
@@ -47,7 +48,51 @@ func CreateFeeStructure(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	utils.JSONResponse(w, http.StatusCreated, true, "Fee structure created", fee)
+	// Auto-generate invoices for all students in this program and semester
+	var students []models.Student
+	db.DB.Where("program_id = ? AND current_semester = ? AND is_active = true", req.ProgramID, req.SemesterNumber).Find(&students)
+
+	for _, student := range students {
+		// Check if invoice already exists for this fee category
+		// For simplicity, we create a master semester invoice if not exists, or update it
+		var invoice models.StudentFeeInvoice
+		err := db.DB.Where("student_id = ? AND academic_year_id = ? AND semester_number = ?", student.ID, req.AcademicYearID, req.SemesterNumber).First(&invoice).Error
+		
+		if err != nil {
+			// Create new invoice
+			invoice = models.StudentFeeInvoice{
+				StudentID:      student.ID,
+				AcademicYearID: req.AcademicYearID,
+				SemesterNumber: req.SemesterNumber,
+				TotalAmount:    req.Amount,
+				NetAmount:      req.Amount,
+				BalanceDue:     req.Amount,
+				Status:         "Unpaid",
+				DueDate:        &dueDate,
+			}
+			db.DB.Create(&invoice)
+		} else {
+			// Update existing invoice
+			newTotal := invoice.TotalAmount + req.Amount
+			newNet := invoice.NetAmount + req.Amount
+			newBalance := invoice.BalanceDue + req.Amount
+			db.DB.Model(&invoice).Updates(map[string]interface{}{
+				"total_amount": newTotal,
+				"net_amount":   newNet,
+				"balance_due":  newBalance,
+				"status":       "Partial", // or keep Unpaid if no payment yet
+			})
+			if invoice.PaidAmount == 0 {
+				db.DB.Model(&invoice).Update("status", "Unpaid")
+			}
+		}
+
+		// Notify student
+		go utils.SendNotificationEmail(student.PersonalEmail, "New Fee Generated", fmt.Sprintf("A new fee of Rs. %.2f has been added to your semester invoice. Due Date: %s", req.Amount, req.DueDate))
+		utils.CreateNotification(student.UserID, "New Fee Pending", fmt.Sprintf("A new fee of Rs. %.2f has been added to your account.", req.Amount), "warning", "/student/payments")
+	}
+
+	utils.JSONResponse(w, http.StatusCreated, true, "Fee structure created and invoices generated", fee)
 }
 
 // ==================== LIST FEE STRUCTURES ====================
@@ -103,11 +148,13 @@ func FinanceDashboard(w http.ResponseWriter, r *http.Request) {
 
 	db.DB.Model(&models.Payment{}).
 		Where("status = ?", models.PaymentSuccess).
-		Select("COALESCE(SUM(amount), 0)").Scan(&totalCollected)
+		Select("COALESCE(SUM(amount_paid), 0)").Scan(&totalCollected)
 
-	db.DB.Model(&models.Payment{}).
-		Where("status = ?", models.PaymentPending).
-		Select("COALESCE(SUM(amount), 0)").Scan(&totalPending)
+	// Since pending payments aren't easily summed from Payment table (because pending payments might just be uncreated payments),
+	// we sum BalanceDue from StudentFeeInvoice table
+	db.DB.Model(&models.StudentFeeInvoice{}).
+		Where("status != ?", "Paid").
+		Select("COALESCE(SUM(balance_due), 0)").Scan(&totalPending)
 
 	// Recent payments
 	var recentPayments []models.Payment
@@ -153,4 +200,11 @@ func GetPaymentByID(w http.ResponseWriter, r *http.Request) {
 	}
 
 	utils.JSONResponse(w, http.StatusOK, true, "Payment fetched", payment)
+}
+
+// ==================== LIST FEE CATEGORIES ====================
+func ListFeeCategories(w http.ResponseWriter, r *http.Request) {
+	var categories []models.FeeCategory
+	db.DB.Find(&categories)
+	utils.JSONResponse(w, http.StatusOK, true, "Fee categories fetched", categories)
 }

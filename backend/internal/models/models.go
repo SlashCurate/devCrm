@@ -598,6 +598,7 @@ type Student struct {
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
 	UserID          string `gorm:"type:uuid;uniqueIndex;not null"`
+	User            User     `gorm:"foreignKey:UserID"`
 	ProgramID       *uint
 	Program         *Program `gorm:"foreignKey:ProgramID"`
 	RollNumber      string   `gorm:"uniqueIndex;not null"`
@@ -1329,4 +1330,113 @@ type PlacementApplication struct {
 
 func (PlacementApplication) TableName() string {
 	return "core.placement_applications"
+}
+
+// ==================== UNIVERSITY ADMIN (core.university_admins) ====================
+type UniversityAdmin struct {
+	ID           uint    `gorm:"primaryKey"`
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
+	UniversityID uint
+	University   University `gorm:"foreignKey:UniversityID"`
+	UserID       *string    `gorm:"type:uuid"`
+	User         *User      `gorm:"foreignKey:UserID"`
+	Designation  string
+}
+
+func (UniversityAdmin) TableName() string {
+	return "core.university_admins"
+}
+
+// ==================== COLLEGE ADMIN (core.college_admins) ====================
+type CollegeAdmin struct {
+	ID          uint    `gorm:"primaryKey"`
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+	CollegeID   uint
+	College     College `gorm:"foreignKey:CollegeID"`
+	UserID      *string `gorm:"type:uuid"`
+	User        *User   `gorm:"foreignKey:UserID"`
+	Designation string
+}
+
+func (CollegeAdmin) TableName() string {
+	return "core.college_admins"
+}
+
+// ==================== APPLICANT (admissions.applicants) ====================
+// Pre-enrollment public application — no user account yet
+type Applicant struct {
+	ID              uint   `gorm:"primaryKey"`
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
+	ApplicationID   string `gorm:"uniqueIndex;not null"` // APP-2024-XXXX
+	ProgramID       uint
+	Program         Program `gorm:"foreignKey:ProgramID"`
+	CollegeID       uint
+	College         College `gorm:"foreignKey:CollegeID"`
+	AcademicYearID  uint
+	AcademicYear    AcademicYear `gorm:"foreignKey:AcademicYearID"`
+	// Personal Info
+	FirstName      string
+	LastName       string
+	Email          string `gorm:"not null"`
+	Phone          string
+	DOB            *time.Time
+	Gender         string
+	Category       string    // General, OBC, SC, ST
+	State          string
+	City           string
+	Address        string
+	Pincode        string
+	// Academic Info
+	PreviousSchool string
+	PreviousGrade  string
+	EntranceExam   string  // JEE, NEET, CAT, State CET
+	EntranceScore  float64
+	// Statement
+	Statement string `gorm:"type:text"`
+	// Status tracking
+	Status          string     `gorm:"default:'submitted'"` // submitted, under_review, shortlisted, rejected, enrolled
+	RejectionReason string
+	Remarks         string
+	// Timestamps
+	SubmittedAt   *time.Time
+	ReviewedAt    *time.Time
+	ReviewedBy    *string    `gorm:"type:uuid"`
+	ShortlistedAt *time.Time
+	EnrolledAt    *time.Time
+	// On enrollment, link to created student
+	StudentID *uint
+	Student   *Student `gorm:"foreignKey:StudentID"`
+}
+
+func (Applicant) TableName() string {
+	return "admissions.applicants"
+}
+
+// ==================== PROFILE CHANGE REQUEST (student.profile_change_requests) ====================
+type ProfileChangeRequest struct {
+	ID          uint   `gorm:"primaryKey"`
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+	TicketID    string `gorm:"uniqueIndex;not null"` // CHG-XXXX
+	StudentID   uint
+	Student     Student `gorm:"foreignKey:StudentID"`
+	// What they want to change
+	FieldName   string // "name", "father_name", "mother_name", "dob", "category", "documents"
+	OldValue    string `gorm:"type:text"`
+	NewValue    string `gorm:"type:text"`
+	Reason      string `gorm:"type:text"`
+	DocumentURL string // supporting document uploaded by student
+	// Workflow
+	Status      string     `gorm:"default:'pending'"` // pending, approved, rejected, expired
+	Deadline    *time.Time // 7 days from creation
+	ReviewedBy  *string    `gorm:"type:uuid"`
+	ReviewedAt  *time.Time
+	Remarks     string
+}
+
+func (ProfileChangeRequest) TableName() string {
+	return "student.profile_change_requests"
 }

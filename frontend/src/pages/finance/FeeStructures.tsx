@@ -13,6 +13,8 @@ export default function FeeStructures() {
   const [fees, setFees] = useState<FeeStructure[]>([]);
   const [colleges, setColleges] = useState<College[]>([]);
   const [programs, setPrograms] = useState<Program[]>([]);
+  const [academicYears, setAcademicYears] = useState<any[]>([]);
+  const [categories, setCategories] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState(false);
   const [editingFee, setEditingFee] = useState<FeeStructure | null>(null);
@@ -26,15 +28,24 @@ export default function FeeStructures() {
   );
 
   const fetchAll = async () => {
-    const [f, cl, co] = await Promise.all([
-      api.get("/finance/fees"),
-      api.get("/colleges"),
-      api.get("/courses"),
-    ]);
-    setFees(f.data?.data || f.data || []);
-    setColleges(cl.data?.data || cl.data || []);
-    setPrograms(co.data?.data || co.data || []);
-    setLoading(false);
+    try {
+      const [f, cl, co, ay, cat] = await Promise.all([
+        api.get("/finance/fees"),
+        api.get("/colleges"),
+        api.get("/courses"),
+        api.get("/academic-years"),
+        api.get("/fee-categories"),
+      ]);
+      setFees(f.data?.data || []);
+      setColleges(cl.data?.data || []);
+      setPrograms(co.data?.data || []);
+      setAcademicYears(ay.data?.data || []);
+      setCategories(cat.data?.data || []);
+    } catch (err) {
+      toast.error("Failed to fetch data");
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -45,9 +56,11 @@ export default function FeeStructures() {
     try {
       const payload = {
         ...data,
-        college_id: Number(data.college_id),
         program_id: Number(data.program_id),
+        academic_year_id: Number(data.academic_year_id),
+        category_id: Number(data.category_id),
         amount: Number(data.amount),
+        semester_number: Number(data.semester_number),
       };
 
       if (editingFee) {
@@ -196,23 +209,22 @@ export default function FeeStructures() {
         title={editingFee ? "Edit Fee Structure" : "Create Fee Structure"}
       >
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          <input
-            {...register("name", { required: true })}
-            className="input-field"
-            placeholder="Fee Name"
-          />
-
           <select
-            {...register("fee_type", { required: true })}
+            {...register("category_id", { required: true })}
             className="input-field"
           >
-            <option value="">Select Type</option>
-            <option value="admission">Admission</option>
-            <option value="semester">Semester</option>
-            <option value="exam">Exam</option>
-            <option value="hostel">Hostel</option>
-            <option value="misc">Misc</option>
+            <option value="">Select Category</option>
+            {categories.map((c) => (
+              <option key={c.id} value={c.id}>{c.name}</option>
+            ))}
           </select>
+
+          <input
+            {...register("semester_number", { required: true })}
+            type="number"
+            className="input-field"
+            placeholder="Semester Number"
+          />
 
           <input
             {...register("amount", { required: true })}
@@ -245,11 +257,15 @@ export default function FeeStructures() {
             ))}
           </select>
 
-          <input
+          <select
             {...register("academic_year_id", { required: true })}
             className="input-field"
-            placeholder="2024-25"
-          />
+          >
+            <option value="">Select Academic Year</option>
+            {academicYears.map((ay) => (
+              <option key={ay.id} value={ay.id}>{ay.name}</option>
+            ))}
+          </select>
 
           <input
             {...register("due_date")}

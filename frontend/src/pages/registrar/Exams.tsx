@@ -15,6 +15,8 @@ export default function Exams() {
   const [colleges, setColleges] = useState<College[]>([]);
   const [programs, setPrograms]   = useState<Program[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [academicYears, setAcademicYears] = useState<any[]>([]);
+  const [semesters, setSemesters] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState(false);
   const { register, handleSubmit, reset, watch } = useForm();
@@ -29,17 +31,26 @@ export default function Exams() {
   );
 
   const fetchAll = async () => {
-    const [e, cl, co, su] = await Promise.all([
-      api.get("/registrar/exams"),
-      api.get("/colleges"),
-      api.get("/courses"),
-      api.get("/registrar/subjects"),
-    ]);
-    setExams(e.data.data || []);
-    setColleges(cl.data.data || []);
-    setPrograms(co.data.data || []);
-    setSubjects(su.data.data || []);
-    setLoading(false);
+    try {
+      const [e, cl, co, su, ay, sem] = await Promise.all([
+        api.get("/registrar/exams"),
+        api.get("/colleges"),
+        api.get("/courses"),
+        api.get("/registrar/subjects"),
+        api.get("/academic-years"),
+        api.get("/semesters"),
+      ]);
+      setExams(e.data.data || []);
+      setColleges(cl.data.data || []);
+      setPrograms(co.data.data || []);
+      setSubjects(su.data.data || []);
+      setAcademicYears(ay.data.data || []);
+      setSemesters(sem.data.data || []);
+    } catch (err) {
+      toast.error("Failed to fetch data");
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => { fetchAll(); }, []);
@@ -52,9 +63,10 @@ export default function Exams() {
         program_id: Number(data.course_id),
         subject_id: data.subject_id ? Number(data.subject_id) : undefined,
         duration: Number(data.duration),
-        max_marks: Number(data.max_marks),
-        pass_marks: Number(data.pass_marks),
-        semester: Number(data.semester),
+        total_marks: Number(data.max_marks), // backend uses total_marks
+        passing_marks: Number(data.pass_marks), // backend uses passing_marks
+        semester_id: Number(data.semester_id),
+        academic_year_id: Number(data.academic_year_id),
         exam_date: new Date(data.exam_date).toISOString(),
       });
       toast.success("Exam created!");
@@ -261,12 +273,15 @@ export default function Exams() {
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Semester
               </label>
-              <input
-                {...register("semester", { required: "Required" })}
-                type="number"
+              <select
+                {...register("semester_id", { required: "Required" })}
                 className="input-field"
-                placeholder="1"
-              />
+              >
+                <option value="">Select Semester</option>
+                {semesters.map((s) => (
+                  <option key={s.id} value={s.id}>Sem {s.semester_number} ({s.academic_year?.name})</option>
+                ))}
+              </select>
             </div>
           </div>
 
@@ -275,11 +290,15 @@ export default function Exams() {
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Academic Year
               </label>
-              <input
-                {...register("academic_year", { required: "Required" })}
+              <select
+                {...register("academic_year_id", { required: "Required" })}
                 className="input-field"
-                placeholder="2024-25"
-              />
+              >
+                <option value="">Select Year</option>
+                {academicYears.map((ay) => (
+                  <option key={ay.id} value={ay.id}>{ay.name}</option>
+                ))}
+              </select>
             </div>
           </div>
 

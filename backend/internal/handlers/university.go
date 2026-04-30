@@ -182,23 +182,37 @@ func ListCourses(w http.ResponseWriter, r *http.Request) {
 
 // ==================== UNIVERSITY DASHBOARD STATS ====================
 func UniversityDashboard(w http.ResponseWriter, r *http.Request) {
-	var totalStudents, totalColleges, totalCourses, pendingApplications, enrolledStudents int64
-	db.DB.Model(&models.Student{}).Count(&totalStudents)
+	var totalStudents, totalColleges, totalCourses, pendingApplications, totalFaculty int64
+	db.DB.Model(&models.Student{}).Where("is_active = ?", true).Count(&totalStudents)
 	db.DB.Model(&models.College{}).Count(&totalColleges)
 	db.DB.Model(&models.Program{}).Count(&totalCourses)
-	db.DB.Model(&models.Application{}).Where("status = ?", "submitted").Count(&pendingApplications)
-	db.DB.Model(&models.Student{}).Where("status = ?", "enrolled").Count(&enrolledStudents)
+	db.DB.Model(&models.Faculty{}).Where("is_active = ?", true).Count(&totalFaculty)
+	db.DB.Model(&models.Applicant{}).Where("status = ?", "submitted").Count(&pendingApplications)
 
 	var totalRevenue float64
-	db.DB.Model(&models.Payment{}).Where("status = ?", models.PaymentSuccess).
-		Select("COALESCE(SUM(amount), 0)").Scan(&totalRevenue)
+	db.DB.Model(&models.Payment{}).Where("status = ?", "completed").
+		Select("COALESCE(SUM(amount_paid), 0)").Scan(&totalRevenue)
 
 	utils.JSONResponse(w, http.StatusOK, true, "Dashboard stats", map[string]interface{}{
 		"total_students":       totalStudents,
+		"total_faculty":        totalFaculty,
 		"total_colleges":       totalColleges,
 		"total_courses":        totalCourses,
 		"pending_applications": pendingApplications,
-		"enrolled_students":    enrolledStudents,
 		"total_revenue":        totalRevenue,
 	})
+}
+
+// ==================== LIST ACADEMIC YEARS ====================
+func ListAcademicYears(w http.ResponseWriter, r *http.Request) {
+	var years []models.AcademicYear
+	db.DB.Order("start_date desc").Find(&years)
+	utils.JSONResponse(w, http.StatusOK, true, "Academic years fetched", years)
+}
+
+// ==================== LIST SEMESTERS ====================
+func ListSemesters(w http.ResponseWriter, r *http.Request) {
+	var semesters []models.Semester
+	db.DB.Preload("AcademicYear").Order("semester_number asc").Find(&semesters)
+	utils.JSONResponse(w, http.StatusOK, true, "Semesters fetched", semesters)
 }

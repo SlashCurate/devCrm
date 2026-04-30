@@ -18,13 +18,17 @@ func SetupRoutes(r *mux.Router) {
 
 	// ==================== PUBLIC ROUTES ====================
 	api.HandleFunc("/auth/login", handlers.Login).Methods("POST", "OPTIONS")
-	api.HandleFunc("/auth/register", handlers.RegisterStudent).Methods("POST", "OPTIONS")
+	api.HandleFunc("/auth/apply", handlers.PublicSubmitApplication).Methods("POST", "OPTIONS")
+	api.HandleFunc("/auth/application-status", handlers.PublicCheckApplicationStatus).Methods("GET", "OPTIONS")
 	api.HandleFunc("/auth/forgot-password", handlers.ForgotPassword).Methods("POST", "OPTIONS")
 	api.HandleFunc("/auth/reset-password", handlers.ResetPassword).Methods("POST", "OPTIONS")
 
 	// Public course/college listing
 	api.HandleFunc("/colleges", handlers.ListColleges).Methods("GET", "OPTIONS")
 	api.HandleFunc("/courses", handlers.ListCourses).Methods("GET", "OPTIONS")
+	api.HandleFunc("/academic-years", handlers.ListAcademicYears).Methods("GET", "OPTIONS")
+	api.HandleFunc("/semesters", handlers.ListSemesters).Methods("GET", "OPTIONS")
+	api.HandleFunc("/fee-categories", handlers.ListFeeCategories).Methods("GET", "OPTIONS")
 
 	// ==================== AUTHENTICATED ROUTES ====================
 	auth := api.PathPrefix("").Subrouter()
@@ -48,6 +52,8 @@ func SetupRoutes(r *mux.Router) {
 	univAdmin.HandleFunc("/admin/colleges/{id}", handlers.UpdateCollege).Methods("PUT", "OPTIONS")
 	univAdmin.HandleFunc("/admin/courses", handlers.CreateCourse).Methods("POST", "OPTIONS")
 	univAdmin.HandleFunc("/admin/applications", handlers.GetAllApplications).Methods("GET", "OPTIONS")
+	univAdmin.HandleFunc("/admin/applications/{id}/shortlist", handlers.ShortlistApplication).Methods("PUT", "OPTIONS")
+	univAdmin.HandleFunc("/admin/applications/{id}/reject", handlers.RejectApplication).Methods("PUT", "OPTIONS")
 	univAdmin.HandleFunc("/admin/payments", handlers.GetAllPayments).Methods("GET", "OPTIONS")
 
 	// --- University Admin: Faculty Management ---
@@ -114,9 +120,8 @@ func SetupRoutes(r *mux.Router) {
 	collegeAdmin.HandleFunc("/college/courses", handlers.GetCollegeCourses).Methods("GET", "OPTIONS")
 	collegeAdmin.HandleFunc("/college/courses/{id}", handlers.UpdateCourse).Methods("PUT", "OPTIONS")
 	collegeAdmin.HandleFunc("/college/applications", handlers.GetAllApplications).Methods("GET", "OPTIONS")
-	collegeAdmin.HandleFunc("/college/applications/{id}/review", handlers.ReviewApplication).Methods("PUT", "OPTIONS")
+	collegeAdmin.HandleFunc("/college/applications/{id}/reject", handlers.RejectApplication).Methods("PUT", "OPTIONS")
 	collegeAdmin.HandleFunc("/college/applications/{id}/enroll", handlers.EnrollStudent).Methods("PUT", "OPTIONS")
-	collegeAdmin.HandleFunc("/college/documents/{id}/verify", handlers.VerifyDocument).Methods("PUT", "OPTIONS")
 	collegeAdmin.HandleFunc("/college/fees", handlers.ListFeeStructures).Methods("GET", "OPTIONS")
 
 	// --- College Admin: Timetable Management ---
@@ -156,6 +161,10 @@ func SetupRoutes(r *mux.Router) {
 	faculty.HandleFunc("/faculty/timetable", handlers.GetFacultyTimetable).Methods("GET", "OPTIONS")
 	faculty.HandleFunc("/faculty/attendance/students/{timetable_id}", handlers.GetStudentsForAttendance).Methods("GET", "OPTIONS")
 	faculty.HandleFunc("/faculty/attendance/mark", handlers.MarkAttendance).Methods("POST", "OPTIONS")
+	
+	// --- Faculty: Internal Marks ---
+	faculty.HandleFunc("/faculty/exams", handlers.ListExams).Methods("GET", "OPTIONS")
+	faculty.HandleFunc("/faculty/results", handlers.AddResult).Methods("POST", "OPTIONS")
 
 	// ==================== STUDENT ROUTES ====================
 	student := auth.PathPrefix("").Subrouter()
@@ -164,10 +173,10 @@ func SetupRoutes(r *mux.Router) {
 	student.HandleFunc("/student/dashboard", handlers.StudentDashboard).Methods("GET", "OPTIONS")
 	student.HandleFunc("/student/profile", handlers.GetStudentProfile).Methods("GET", "OPTIONS")
 	student.HandleFunc("/student/profile", handlers.UpdateStudentProfile).Methods("PUT", "OPTIONS")
-	student.HandleFunc("/student/applications", handlers.SubmitApplication).Methods("POST", "OPTIONS")
-	student.HandleFunc("/student/applications", handlers.GetMyApplications).Methods("GET", "OPTIONS")
-	student.HandleFunc("/student/documents", handlers.UploadDocument).Methods("POST", "OPTIONS")
-	student.HandleFunc("/student/documents", handlers.GetDocuments).Methods("GET", "OPTIONS")
+	student.HandleFunc("/student/profile/change-requests", handlers.GetMyChangeRequests).Methods("GET", "OPTIONS")
+	student.HandleFunc("/student/profile/change-requests", handlers.RequestProfileChange).Methods("POST", "OPTIONS")
+	// The SubmitApplication and GetMyApplications are now obsolete for enrolled students as they are already enrolled. 
+	// But let's leave GetMyApplications if they want to view their past application details.
 	student.HandleFunc("/student/payments", handlers.GetMyPayments).Methods("GET", "OPTIONS")
 	student.HandleFunc("/student/payments/pending", handlers.GetPendingFees).Methods("GET", "OPTIONS")
 	student.HandleFunc("/student/payments/order", handlers.CreatePaymentOrder).Methods("POST", "OPTIONS")

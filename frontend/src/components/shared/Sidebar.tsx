@@ -5,7 +5,7 @@ import {
   LayoutDashboard, Users, BookOpen, GraduationCap,
   CreditCard, FileText, Bell, LogOut, Menu, X,
   Building2, ClipboardList, BarChart3, ChevronRight,
-  Clock, Calendar,
+  Clock, Calendar, User,
 } from "lucide-react";
 import clsx from "clsx";
 
@@ -70,6 +70,7 @@ const roleMenus: Record<string, { label: string; icon: any; path: string }[]> = 
   ],
   student: [
     { label: "Dashboard",    icon: LayoutDashboard, path: "/student/dashboard"    },
+    { label: "Profile",      icon: User,            path: "/student/profile"      },
     { label: "Applications", icon: FileText,        path: "/student/applications" },
     { label: "Payments",     icon: CreditCard,      path: "/student/payments"     },
     { label: "Results",      icon: BarChart3,       path: "/student/results"      },
