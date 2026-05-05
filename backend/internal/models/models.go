@@ -352,28 +352,33 @@ func (Semester) TableName() string {
 
 // ==================== PROGRAM (academic.programs) ====================
 type Program struct {
-	ID             uint `gorm:"primaryKey"`
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
-	DepartmentID   uint
-	Department     Department `gorm:"foreignKey:DepartmentID"`
-	Name           string     `gorm:"not null"`
-	Code           string     `gorm:"uniqueIndex;not null"`
-	DegreeType     string     // B.Tech, M.Tech, MBA, BCA, MCA, PhD
-	DurationYears  int
-	TotalSemesters int
-	TotalCredits   int
-	IntakeCapacity int
-	Eligibility    string
-	Description    string
-	IsActive       bool `gorm:"default:true"`
-	// Relations
-	Students      []Student
-	FeeStructures []FeeStructure
-	Applications  []Application
-	Admissions    []Admission
-	Timetables    []Timetable
-	Exams         []Exam
+	ID             uint      `gorm:"primaryKey" json:"id"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
+
+	DepartmentID   uint       `json:"department_id"`
+	Department     Department `gorm:"foreignKey:DepartmentID" json:"department"`
+
+	Name           string `gorm:"not null" json:"name"`
+	Code           string `gorm:"uniqueIndex;not null" json:"code"`
+	DegreeType     string `json:"degree_type"`
+	DurationYears  int    `json:"duration_years"`
+	TotalSemesters int    `json:"total_semesters"`
+	TotalCredits   int    `json:"total_credits"`
+
+	IntakeCapacity int    `json:"total_seats"` // 👈 map this properly
+	Eligibility    string `json:"eligibility_criteria"`
+	Description    string `json:"description"`
+
+	IsActive       bool `gorm:"default:true" json:"is_active"`
+
+	// Relations (optional in response)
+	Students      []Student      `json:"-"`
+	FeeStructures []FeeStructure `json:"-"`
+	Applications  []Application  `json:"-"`
+	Admissions    []Admission    `json:"-"`
+	Timetables    []Timetable    `json:"-"`
+	Exams         []Exam         `json:"-"`
 }
 
 func (Program) TableName() string {
