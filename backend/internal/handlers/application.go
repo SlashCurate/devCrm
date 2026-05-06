@@ -822,7 +822,6 @@ func SaveApplicationDraft(w http.ResponseWriter, r *http.Request) {
 		updates := map[string]interface{}{
 			"draft_data":      req.DraftData,
 			"email":		   req.Email,
-			""
 			"draft_saved_at":  now,
 			"academic_year_id": cycle.AcademicYearID,
 		}
