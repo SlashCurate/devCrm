@@ -23,6 +23,19 @@ func SetupRoutes(r *mux.Router) {
 	api.HandleFunc("/auth/forgot-password", handlers.ForgotPassword).Methods("POST", "OPTIONS")
 	api.HandleFunc("/auth/reset-password", handlers.ResetPassword).Methods("POST", "OPTIONS")
 
+	// OTP & Applicant Registration
+	api.HandleFunc("/auth/send-otp", handlers.SendOTP).Methods("POST", "OPTIONS")
+	api.HandleFunc("/auth/verify-otp", handlers.VerifyOTP).Methods("POST", "OPTIONS")
+	api.HandleFunc("/auth/register-applicant", handlers.RegisterApplicant).Methods("POST", "OPTIONS")
+	api.HandleFunc("/auth/send-login-otp", handlers.SendLoginOTP).Methods("POST", "OPTIONS")
+	api.HandleFunc("/auth/login-otp", handlers.LoginWithOTP).Methods("POST", "OPTIONS")
+
+	// Public admission routes
+	api.HandleFunc("/admissions/cycles", handlers.ListAdmissionCycles).Methods("GET", "OPTIONS")
+	api.HandleFunc("/admissions/active-cycle", handlers.GetActiveAdmissionCycle).Methods("GET", "OPTIONS")
+	api.HandleFunc("/admissions/draft", handlers.GetApplicationDraft).Methods("GET", "OPTIONS")
+	api.HandleFunc("/admissions/draft", handlers.SaveApplicationDraft).Methods("POST", "OPTIONS")
+
 	// Public course/college listing
 	api.HandleFunc("/colleges", handlers.ListColleges).Methods("GET", "OPTIONS")
 	api.HandleFunc("/courses", handlers.ListCourses).Methods("GET", "OPTIONS")
@@ -55,6 +68,23 @@ func SetupRoutes(r *mux.Router) {
 	univAdmin.HandleFunc("/admin/applications/{id}/shortlist", handlers.ShortlistApplication).Methods("PUT", "OPTIONS")
 	univAdmin.HandleFunc("/admin/applications/{id}/reject", handlers.RejectApplication).Methods("PUT", "OPTIONS")
 	univAdmin.HandleFunc("/admin/payments", handlers.GetAllPayments).Methods("GET", "OPTIONS")
+
+	// Admin: Admission Cycle Management
+	univAdmin.HandleFunc("/admin/admission-cycles", handlers.ListAllAdmissionCycles).Methods("GET", "OPTIONS")
+	univAdmin.HandleFunc("/admin/admission-cycles", handlers.CreateAdmissionCycle).Methods("POST", "OPTIONS")
+	univAdmin.HandleFunc("/admin/admission-cycles/{id}", handlers.UpdateAdmissionCycle).Methods("PUT", "OPTIONS")
+	univAdmin.HandleFunc("/admin/admission-cycles/{id}/toggle", handlers.ToggleAdmissionCycle).Methods("PUT", "OPTIONS")
+	//univAdmin.HandleFunc("/admin/admission-cycles/{id}", handlers.DeleteAdmissionCycle).Methods("DELETE", "OPTIONS")
+
+	// Admin: Seat Matrix Management (Real-world seat allocation)
+	univAdmin.HandleFunc("/admin/seat-matrices", handlers.GetSeatMatrix).Methods("GET", "OPTIONS")
+	univAdmin.HandleFunc("/admin/seat-matrices", handlers.CreateSeatMatrix).Methods("POST", "OPTIONS")
+
+	// Admin: Application Review & Management
+	univAdmin.HandleFunc("/admin/applications/review", handlers.ListApplicationsForReview).Methods("GET", "OPTIONS")
+	univAdmin.HandleFunc("/admin/applications/{id}/review", handlers.ReviewApplication).Methods("PUT", "OPTIONS")
+	univAdmin.HandleFunc("/admin/applications/bulk-shortlist", handlers.BulkShortlistApplications).Methods("POST", "OPTIONS")
+	univAdmin.HandleFunc("/admin/applications/statistics", handlers.GetApplicationStatistics).Methods("GET", "OPTIONS")
 
 	// --- University Admin: Faculty Management ---
 	univAdmin.HandleFunc("/admin/faculty", handlers.CreateFaculty).Methods("POST", "OPTIONS")

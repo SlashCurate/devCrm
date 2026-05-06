@@ -1,11 +1,11 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import {
   LayoutDashboard, Users, BookOpen, GraduationCap,
   CreditCard, FileText, Bell, LogOut, Menu, X,
   Building2, ClipboardList, BarChart3, ChevronRight,
-  Clock, Calendar, User,
+  Clock, Calendar, User, CalendarDays,
 } from "lucide-react";
 import clsx from "clsx";
 
@@ -28,6 +28,7 @@ const roleMenus: Record<string, { label: string; icon: any; path: string }[]> = 
     { label: "Colleges",     icon: Building2,       path: "/admin/colleges"   },
     { label: "Courses",      icon: BookOpen,        path: "/admin/courses"    },
     { label: "Users",        icon: Users,           path: "/admin/users"      },
+    { label: "Admissions",   icon: CalendarDays,    path: "/admin/admissions" },
     { label: "Applications", icon: ClipboardList,   path: "/admin/applications"},
     { label: "Payments",     icon: CreditCard,      path: "/admin/payments"   },
   ],

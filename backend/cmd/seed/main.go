@@ -113,22 +113,61 @@ db.DB.Create(&fac1)
 feeCat1 := models.FeeCategory{Name: "Tuition Fee", Description: "Academic tuition"}
 feeCat2 := models.FeeCategory{Name: "Exam Fee", Description: "Semester exams"}
 db.DB.Create(&feeCat1)
-db.DB.Create(&feeCat2)
 
 	db.DB.Create(&models.FeeStructure{ProgramID: btechCSE.ID, AcademicYearID: ay24.ID, SemesterNumber: 1, CategoryID: feeCat1.ID, Amount: 60000.0, IsActive: true, CreatedBy: users[1].ID})
 	db.DB.Create(&models.FeeStructure{ProgramID: btechCSE.ID, AcademicYearID: ay24.ID, SemesterNumber: 1, CategoryID: feeCat2.ID, Amount: 3000.0, IsActive: true, CreatedBy: users[1].ID})
 	db.DB.Create(&models.FeeStructure{ProgramID: btechCSE.ID, AcademicYearID: ay24.ID, SemesterNumber: 2, CategoryID: feeCat1.ID, Amount: 60000.0, IsActive: true, CreatedBy: users[1].ID})
 
-// PUBLIC APPLICANTS (Not enrolled yet)
-app1 := models.Applicant{ApplicationID: "APP-2024-0001", ProgramID: btechCSE.ID, CollegeID: cet.ID, AcademicYearID: ay24.ID, FirstName: "Ramesh", LastName: "Singh", Email: "ramesh.singh@gmail.com", Phone: "9876543210", Status: "submitted", SubmittedAt: ptr(time.Now())}
-db.DB.Create(&app1)
+	// ADMISSION CYCLE
+	cycle := models.AdmissionCycle{
+		Name:                 "B.Tech 2024-25 Admission",
+		Description:          "Admission cycle for B.Tech programs for academic year 2024-25",
+		AcademicYearID:       ay24.ID,
+		ApplicationStartDate: time.Now().AddDate(0, -1, 0), // Started 1 month ago
+		ApplicationEndDate:   time.Now().AddDate(0, 2, 0),  // Ends 2 months from now
+		IsActive:             true,
+		IsPublished:          true,
+		ApplicationFee:       500,
+		AdmissionFee:         50000,
+		MaxApplications:      100,
+		CreatedBy:            users[0].ID,
+	}
+	db.DB.Create(&cycle)
+	log.Println("✅ Admission cycle created")
 
-// ENROLLED STUDENTS
-studUser := models.User{Username: "24cse001", Email: "24cse001@student.ntu.edu.in", PasswordHash: hashPassword("Student@123"), RoleID: roles[6].ID, IsActive: true}
-db.DB.Create(&studUser)
+	// PUBLIC APPLICANTS (Not enrolled yet)
+	app1 := models.Applicant{
+		ApplicationID:    "APP-2024-0001",
+		AdmissionCycleID: &cycle.ID,
+		ProgramID:        btechCSE.ID,
+		CollegeID:        cet.ID,
+		AcademicYearID:   ay24.ID,
+		FirstName:        "Ramesh",
+		LastName:         "Singh",
+		Email:            "ramesh.singh@gmail.com",
+		Phone:            "9876543210",
+		Status:           models.ApplicationSubmitted,
+		SubmittedAt:      ptr(time.Now()),
+		ApplicationFee:   cycle.ApplicationFee,
+		AdmissionFee:     cycle.AdmissionFee,
+	}
+	db.DB.Create(&app1)
 
-student1 := models.Student{UserID: studUser.ID, ProgramID: &btechCSE.ID, RollNumber: "24CSE001", UniversityRegNo: "NTU24CSE001", FirstName: "Divya", LastName: "Kapoor", CurrentSemester: 1, IsActive: true}
-db.DB.Create(&student1)
+	// ENROLLED STUDENTS
+	studUser := models.User{Username: "24cse001", Email: "24cse001@student.ntu.edu.in", PasswordHash: hashPassword("Student@123"), RoleID: roles[6].ID, IsActive: true}
+	db.DB.Create(&studUser)
+
+	student1 := models.Student{
+		UserID:          studUser.ID,
+		ProgramID:       &btechCSE.ID,
+		RollNumber:      "24CSE001",
+		UniversityRegNo: "NTU24CSE001",
+		FirstName:       "Divya",
+		LastName:        "Kapoor",
+		CurrentSemester: 1,
+		IsActive:        true,
+	}
+	db.DB.Create(&student1)
 
 // INVOICES & PAYMENTS
 inv1 := models.StudentFeeInvoice{StudentID: student1.ID, AcademicYearID: ay24.ID, SemesterNumber: 1, TotalAmount: 63000, NetAmount: 63000, PaidAmount: 63000, BalanceDue: 0, Status: "Paid"}

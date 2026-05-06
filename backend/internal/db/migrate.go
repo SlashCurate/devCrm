@@ -76,6 +76,7 @@ func AutoMigrate() error {
 		&models.StudentLeave{},
 
 		// Admissions (pre-enrollment)
+		&models.AdmissionCycle{},
 		&models.Applicant{},
 		&models.Application{},
 		&models.Document{},

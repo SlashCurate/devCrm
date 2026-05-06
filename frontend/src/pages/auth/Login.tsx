@@ -1,6 +1,5 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { useForm } from "react-hook-form";
 import { Eye, EyeOff, LogIn } from "lucide-react";
 import toast from "react-hot-toast";
 import api from "../../api/axios";
@@ -25,20 +24,33 @@ const roleIdPaths: Record<number, string> = {
 };
 
 export default function Login() {
-  const { login }        = useAuth();
-  const navigate         = useNavigate();
-  const [show, setShow]  = useState(false);
+  const { login } = useAuth();
+  const navigate = useNavigate();
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const { register, handleSubmit, formState: { errors } } = useForm<LoginForm>();
+  const [formData, setFormData] = useState<LoginForm>({
+    email: "",
+    password: "",
+  });
 
-  const onSubmit = async (data: LoginForm) => {
+  // Password Login
+  const handlePasswordLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData.email || !formData.password) {
+      toast.error("Please enter email and password");
+      return;
+    }
+
     setLoading(true);
     try {
-      const res = await api.post("/auth/login", data);
+      const res = await api.post("/auth/login", {
+        email: formData.email,
+        password: formData.password,
+      });
       const { token, user } = res.data.data;
       login(token, user);
-      toast.success(`Welcome back, ${user.username}!`);
+      toast.success(`Welcome back, ${user.username || user.email}!`);
       navigate(roleIdPaths[user.role_id] || "/student/dashboard");
     } catch (err: any) {
       toast.error(err.response?.data?.error || "Invalid credentials");
@@ -106,25 +118,19 @@ export default function Login() {
             <div className="bg-white/95 backdrop-blur-sm rounded-2xl p-8 shadow-2xl text-gray-900">
               <h3 className="text-xl font-bold mb-6">Welcome Back</h3>
 
-              <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
+              {/* Password Login Form */}
+              <form onSubmit={handlePasswordLogin} className="space-y-5">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Email Address
                   </label>
                   <input
-                    {...register("email", {
-                      required: "Email is required",
-                      pattern: { value: /\S+@\S+\.\S+/, message: "Invalid email" },
-                    })}
                     type="email"
+                    value={formData.email}
+                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                     placeholder="you@university.edu"
                     className="input-field"
                   />
-                  {errors.email && (
-                    <p className="text-red-500 text-xs mt-1">
-                      {errors.email.message}
-                    </p>
-                  )}
                 </div>
 
                 <div>
@@ -133,32 +139,24 @@ export default function Login() {
                   </label>
                   <div className="relative">
                     <input
-                      {...register("password", { required: "Password is required" })}
-                      type={show ? "text" : "password"}
+                      type={showPassword ? "text" : "password"}
+                      value={formData.password}
+                      onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                       placeholder="••••••••"
                       className="input-field pr-10"
                     />
                     <button
                       type="button"
-                      onClick={() => setShow(!show)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2
-                                 text-gray-400 hover:text-gray-600"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
                     >
-                      {show ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
                   </div>
-                  {errors.password && (
-                    <p className="text-red-500 text-xs mt-1">
-                      {errors.password.message}
-                    </p>
-                  )}
                 </div>
 
                 <div className="flex justify-end">
-                  <Link
-                    to="/forgot-password"
-                    className="text-sm text-primary-600 hover:underline"
-                  >
+                  <Link to="/forgot-password" className="text-sm text-primary-600 hover:underline">
                     Forgot password?
                   </Link>
                 </div>
@@ -169,8 +167,7 @@ export default function Login() {
                   className="btn-primary w-full flex items-center justify-center gap-2"
                 >
                   {loading ? (
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent
-                                    rounded-full animate-spin" />
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                   ) : (
                     <LogIn className="w-4 h-4" />
                   )}
@@ -180,8 +177,8 @@ export default function Login() {
 
               <p className="text-center text-sm text-gray-500 mt-6">
                 New student?{" "}
-                <Link to="/student/apply" className="text-primary-600 font-medium hover:underline">
-                  Apply for Registration
+                <Link to="/register" className="text-primary-600 font-medium hover:underline">
+                  Register Here
                 </Link>
               </p>
 
@@ -196,7 +193,7 @@ export default function Login() {
                   <p>Registrar: registrar@ntu.edu.in / Admin@123</p>
                   <p>College: cetadmin@ntu.edu.in / Admin@123</p>
                   <p>Faculty: rajesh.kumar@ntu.edu.in / Faculty@123</p>
-                  <p>Student: 22cse001@student.ntu.edu.in / Student@123</p>
+                  <p>Student: 24cse001@student.ntu.edu.in / Student@123</p>
                 </div>
               </div>
             </div>

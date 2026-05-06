@@ -16,6 +16,7 @@ import AdminDashboard from "./pages/admin/Dashboard";
 import AdminUsers     from "./pages/admin/Users";
 import AdminColleges  from "./pages/admin/Colleges";
 import AdminCourses   from "./pages/admin/Courses";
+import AdmissionCycles from "./pages/admin/AdmissionCycles";
 
 // Finance Pages
 import FinanceDashboard from "./pages/finance/Dashboard";
@@ -59,21 +60,11 @@ import StudentEvents     from "./pages/student/Events";
 import StudentProfile    from "./pages/student/Profile";
 import ApplicationStatus from "./pages/student/ApplicationStatus";
 
+// Applicant Pages (Pre-enrollment)
+import ApplicantDashboard from "./pages/applicant/Dashboard";
+
 // Shared
 import Notifications from "./pages/Notifications";
-
-// Role ID to name mapping (matching database seed order)
-// 1=university_admin, 2=finance_controller, 3=registrar, 4=college_admin, 5=hod, 6=faculty, 7=student, 8=staff
-const roleIdToName: Record<number, string> = {
-  1: "university_admin",
-  2: "finance_controller",
-  3: "registrar",
-  4: "college_admin",
-  5: "hod",
-  6: "faculty",
-  7: "student",
-  8: "staff",
-};
 
 // ── Protected Route ──
 function ProtectedRoute({
@@ -110,9 +101,12 @@ function AppRoutes() {
       {/* Public */}
       <Route path="/login"           element={<Login />} />
       <Route path="/register"        element={<Register />} />
-      <Route path="/apply"              element={<Apply />} />
+      
+      {/* Public - Application Form (checks sessionStorage for applicant info) */}
+      <Route path="/apply" element={<Apply />} />
       <Route path="/application-status" element={<ApplicationStatus />} />
       <Route path="/auth/application-status" element={<ApplicationStatus />} />
+      <Route path="/applicant/dashboard" element={<ApplicantDashboard />} />
       <Route path="/forgot-password"    element={<ForgotPassword />} />
       <Route path="/reset-password"  element={<ResetPassword />} />
 
@@ -156,6 +150,16 @@ function AppRoutes() {
       <Route path="/admin/applications" element={
         <ProtectedRoute roleIds={adminRoles}>
           <CollegeApplications />
+        </ProtectedRoute>
+      } />
+      <Route path="/admin/admission-cycles" element={
+        <ProtectedRoute roleIds={adminRoles}>
+          <AdmissionCycles />
+        </ProtectedRoute>
+      } />
+      <Route path="/admin/admissions" element={
+        <ProtectedRoute roleIds={adminRoles}>
+          <AdmissionCycles />
         </ProtectedRoute>
       } />
       <Route path="/admin/payments" element={

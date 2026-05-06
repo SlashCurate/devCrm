@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import Layout from "../../components/shared/Layout";
 import PageHeader from "../../components/shared/PageHeader";
 import Modal from "../../components/shared/Modal";

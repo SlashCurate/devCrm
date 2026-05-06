@@ -2,6 +2,8 @@ package models
 
 import (
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // ==================== ROLES ====================
@@ -14,19 +16,29 @@ const (
 	RoleFaculty           = "faculty"            // ID 6
 	RoleStudent           = "student"            // ID 7
 	RoleStaff             = "staff"              // ID 8
+	RoleApplicant         = "applicant"          // ID 9 (pre-enrollment)
 )
 
 // ==================== APPLICATION STATUS ====================
 const (
-	ApplicationDraft       = "draft"
-	ApplicationSubmitted   = "submitted"
-	ApplicationUnderReview = "under_review"
-	ApplicationShortlisted = "shortlisted"
-	ApplicationRejected    = "rejected"
-	ApplicationEnrolled    = "enrolled"
-	ApplicationPending     = "pending"
-	ApplicationAdmitted    = "admitted"
-	ApplicationWaitlisted  = "waitlisted"
+	// Application Status Workflow
+	ApplicationDraft              = "draft"               // Initial state, auto-saving
+	ApplicationSubmitted          = "submitted"           // Form submitted, pending payment
+	ApplicationPaymentPending     = "payment_pending"     // Waiting for application fee
+	ApplicationPaymentCompleted   = "payment_completed"   // Fee paid, ready for review
+	ApplicationUnderReview        = "under_review"        // Under admin review
+	ApplicationShortlisted        = "shortlisted"         // Selected for admission
+	ApplicationDocumentVerification = "document_verification" // Verifying documents
+	ApplicationAdmissionFeePending  = "admission_fee_pending"  // Waiting for admission fee
+	ApplicationAdmissionFeePaid     = "admission_fee_paid"    // Admission fee paid
+	ApplicationEnrolled           = "enrolled"            // Fully enrolled, student created
+	ApplicationRejected           = "rejected"            // Application rejected
+	ApplicationWaitlisted         = "waitlisted"          // On waiting list
+	ApplicationCancelled          = "cancelled"           // Applicant cancelled
+	
+	// Legacy aliases for backward compatibility
+	ApplicationPending = "pending"
+	ApplicationAdmitted = "admitted"
 )
 
 // ==================== PAYMENT STATUS ====================
@@ -1371,18 +1383,31 @@ func (CollegeAdmin) TableName() string {
 }
 
 // ==================== APPLICANT (admissions.applicants) ====================
-// Pre-enrollment public application — no user account yet
+// Pre-enrollment public application — linked to user account when authenticated
 type Applicant struct {
 	ID              uint   `gorm:"primaryKey"`
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
+	
+	// User Account Reference (for authenticated applicants)
+	UserID          *uuid.UUID `gorm:"type:uuid;index"`
+	User            *User      `gorm:"foreignKey:UserID"`
+	
+	// Application ID
 	ApplicationID   string `gorm:"uniqueIndex;not null"` // APP-2024-XXXX
+	
+	// Admission Cycle Reference
+	AdmissionCycleID *uint
+	AdmissionCycle   *AdmissionCycle `gorm:"foreignKey:AdmissionCycleID"`
+	
+	// Academic Info
 	ProgramID       uint
 	Program         Program `gorm:"foreignKey:ProgramID"`
 	CollegeID       uint
 	College         College `gorm:"foreignKey:CollegeID"`
 	AcademicYearID  uint
 	AcademicYear    AcademicYear `gorm:"foreignKey:AcademicYearID"`
+	
 	// Personal Info
 	FirstName      string
 	LastName       string
@@ -1395,23 +1420,52 @@ type Applicant struct {
 	City           string
 	Address        string
 	Pincode        string
+	
 	// Academic Info
 	PreviousSchool string
 	PreviousGrade  string
+	PreviousPercentage float64
+	YearOfPassing  int
 	EntranceExam   string  // JEE, NEET, CAT, State CET
 	EntranceScore  float64
+	MeritRank      int
+	
 	// Statement
 	Statement string `gorm:"type:text"`
-	// Status tracking
-	Status          string     `gorm:"default:'submitted'"` // submitted, under_review, shortlisted, rejected, enrolled
+	
+	// Application Status Workflow:
+	// Draft -> Submitted -> PaymentPending -> PaymentCompleted -> UnderReview -> Shortlisted -> 
+	// DocumentVerification -> AdmissionFeePending -> AdmissionFeePaid -> Enrolled
+	Status          string     `gorm:"default:'draft'"`
 	RejectionReason string
 	Remarks         string
+	
+	// Payment Tracking
+	ApplicationFee  float64 `gorm:"default:0"`
+	ApplicationFeePaid bool `gorm:"default:false"`
+	ApplicationFeePaymentID *string
+	AdmissionFee    float64 `gorm:"default:0"`
+	AdmissionFeePaid bool `gorm:"default:false"`
+	AdmissionFeePaymentID *string
+	
+	// Document Upload Status
+	DocumentsUploaded bool `gorm:"default:false"`
+	DocumentsVerified bool `gorm:"default:false"`
+	
+	// Auto-save Draft Data (JSON)
+	DraftData       string `gorm:"type:jsonb"`
+	
 	// Timestamps
-	SubmittedAt   *time.Time
-	ReviewedAt    *time.Time
-	ReviewedBy    *string    `gorm:"type:uuid"`
-	ShortlistedAt *time.Time
-	EnrolledAt    *time.Time
+	DraftSavedAt    *time.Time
+	SubmittedAt     *time.Time
+	PaymentCompletedAt *time.Time
+	ReviewedAt      *time.Time
+	ReviewedBy      *string    `gorm:"type:uuid"`
+	ShortlistedAt   *time.Time
+	DocumentsVerifiedAt *time.Time
+	AdmissionFeePaidAt *time.Time
+	EnrolledAt      *time.Time
+	
 	// On enrollment, link to created student
 	StudentID *uint
 	Student   *Student `gorm:"foreignKey:StudentID"`
@@ -1419,6 +1473,180 @@ type Applicant struct {
 
 func (Applicant) TableName() string {
 	return "admissions.applicants"
+}
+
+// ==================== ADMISSION CYCLE (admissions.admission_cycles) ====================
+// Controls when admissions are open for specific programs
+type AdmissionCycle struct {
+	ID              uint `gorm:"primaryKey"`
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
+	
+	// Reference to academic year
+	AcademicYearID  uint
+	AcademicYear    AcademicYear `gorm:"foreignKey:AcademicYearID"`
+	
+	// Cycle details
+	Name            string    // e.g., "B.Tech 2024-25 Admission"
+	Description     string
+	
+	// Dates
+	ApplicationStartDate time.Time
+	ApplicationEndDate   time.Time
+	
+	// Status
+	IsActive        bool `gorm:"default:false"` // Admin controlled open/close
+	IsPublished     bool `gorm:"default:false"` // Visible to public
+	
+	// Program specific cycles (optional - if null, applies to all programs)
+	ProgramID       *uint
+	Program         *Program `gorm:"foreignKey:ProgramID"`
+	CollegeID       *uint
+	College         *College `gorm:"foreignKey:CollegeID"`
+	
+	// Fees
+	ApplicationFee  float64 `gorm:"default:0"`
+	AdmissionFee    float64 `gorm:"default:0"`
+	
+	// Limits
+	MaxApplications int       // 0 = unlimited
+	TotalApplications int    `gorm:"-"` // computed
+	
+	CreatedBy       string `gorm:"type:uuid"`
+}
+
+func (AdmissionCycle) TableName() string {
+	return "admissions.admission_cycles"
+}
+
+// Check if admissions are currently open for this cycle
+// Real universities use DATE-BASED automatic open/close, not manual toggles
+func (ac *AdmissionCycle) IsOpen() bool {
+	now := time.Now()
+	return ac.IsPublished && 
+		now.After(ac.ApplicationStartDate) && 
+		now.Before(ac.ApplicationEndDate)
+}
+
+// GetCycleStatus returns human-readable status for display
+func (ac *AdmissionCycle) GetCycleStatus() string {
+	now := time.Now()
+	if !ac.IsPublished {
+		return "unpublished"
+	}
+	if now.Before(ac.ApplicationStartDate) {
+		return "upcoming"
+	}
+	if now.After(ac.ApplicationEndDate) {
+		return "closed"
+	}
+	return "open"
+}
+
+// DaysUntilClose returns number of days until admission closes
+func (ac *AdmissionCycle) DaysUntilClose() int {
+	now := time.Now()
+	if now.After(ac.ApplicationEndDate) {
+		return 0
+	}
+	return int(ac.ApplicationEndDate.Sub(now).Hours() / 24)
+}
+
+// ==================== SEAT MATRIX (admissions.seat_matrices) ====================
+// Real-world seat management with category-based quotas
+
+type SeatMatrix struct {
+	ID              uint `gorm:"primaryKey"`
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
+	
+	// Reference
+	AdmissionCycleID uint
+	AdmissionCycle   AdmissionCycle `gorm:"foreignKey:AdmissionCycleID"`
+	ProgramID        uint
+	Program          Program `gorm:"foreignKey:ProgramID"`
+	CollegeID        uint
+	College          College `gorm:"foreignKey:CollegeID"`
+	
+	// Total Seats
+	TotalSeats      int
+	
+	// Category-wise breakdown (as per government rules)
+	GeneralSeats    int  // 50%
+	OBCSeats        int  // 27%
+	SCSeats         int  // 15%
+	STSeats         int  // 8%
+	EWSSeats        int  // 10% (Economically Weaker Section)
+	
+	// Management/NRI quota (private universities)
+	ManagementSeats int  // Typically 15-35%
+	NRISeats         int  // NRI/Foreign quota
+	
+	// Filled seats tracking
+	GeneralFilled    int  `gorm:"default:0"`
+	OBCFilled        int  `gorm:"default:0"`
+	SCFilled         int  `gorm:"default:0"`
+	STFilled         int  `gorm:"default:0"`
+	EWSFilled        int  `gorm:"default:0"`
+	ManagementFilled int  `gorm:"default:0"`
+	NRIFilled        int  `gorm:"default:0"`
+	
+	// Conversion tracking (when reserved seats are vacant)
+	// SC/ST vacant → OBC → General
+	ConvertedToGeneral int `gorm:"default:0"`
+	ConvertedToOBC     int `gorm:"default:0"`
+}
+
+func (SeatMatrix) TableName() string {
+	return "admissions.seat_matrices"
+}
+
+// GetAvailableSeats returns available seats for a category
+func (sm *SeatMatrix) GetAvailableSeats(category string) int {
+	switch category {
+	case "general":
+		return sm.GeneralSeats - sm.GeneralFilled + sm.ConvertedToGeneral
+	case "obc":
+		return sm.OBCSeats - sm.OBCFilled + sm.ConvertedToOBC
+	case "sc":
+		return sm.SCSeats - sm.SCFilled
+	case "st":
+		return sm.STSeats - sm.STFilled
+	case "ews":
+		return sm.EWSSeats - sm.EWSFilled
+	case "management":
+		return sm.ManagementSeats - sm.ManagementFilled
+	case "nri":
+		return sm.NRISeats - sm.NRIFilled
+	default:
+		return sm.GeneralSeats - sm.GeneralFilled
+	}
+}
+
+// FillSeat marks a seat as filled for the given category
+func (sm *SeatMatrix) FillSeat(category string) bool {
+	available := sm.GetAvailableSeats(category)
+	if available <= 0 {
+		return false
+	}
+	
+	switch category {
+	case "general":
+		sm.GeneralFilled++
+	case "obc":
+		sm.OBCFilled++
+	case "sc":
+		sm.SCFilled++
+	case "st":
+		sm.STFilled++
+	case "ews":
+		sm.EWSFilled++
+	case "management":
+		sm.ManagementFilled++
+	case "nri":
+		sm.NRIFilled++
+	}
+	return true
 }
 
 // ==================== PROFILE CHANGE REQUEST (student.profile_change_requests) ====================

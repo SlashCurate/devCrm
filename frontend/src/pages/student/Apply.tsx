@@ -1,23 +1,25 @@
-import React, { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useState, useCallback, useRef, Fragment } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import api from "../../api/axios";
 import toast from "react-hot-toast";
-import { College, Course } from "../../types";
+import type { College, Course, AdmissionCycle } from "../../types";
 import {
   GraduationCap, Send, CheckCircle,
-  User, BookOpen, Layers, FileText, XCircle, Clock
+  User, BookOpen, Layers, FileText, XCircle, Clock,
+  Calendar
 } from "lucide-react";
 
 interface ApplyForm {
+  cycle_id:        number;
   course_id:       number;
   college_id:      number;
   first_name:      string;
   last_name:       string;
+  email:           string;
+  phone:           string;
   dob:             string;
   gender:          string;
-  phone:           string;
-  email:           string;
   address:         string;
   city:            string;
   state:           string;
@@ -27,73 +29,228 @@ interface ApplyForm {
   statement:       string;
 }
 
+// Applicant info from registration (stored in sessionStorage)
+interface ApplicantInfo {
+  application_id: string;
+  email: string;
+  phone: string;
+  first_name: string;
+  last_name: string;
+}
+
 const STEPS = [
+  { label: "Select Admission", icon: Calendar },
   { label: "Personal Info", icon: User      },
   { label: "Academic Info", icon: BookOpen  },
   { label: "Course Select", icon: Layers    },
-  { label: "Review",        icon: FileText  },
+  { label: "Review",         icon: FileText  },
 ];
 
 export default function Apply() {
-  const [step,       setStep]       = useState(0);
-  const [colleges,   setColleges]   = useState<College[]>([]);
-  const [courses,    setCourses]    = useState<Course[]>([]);
-  const [loading,    setLoading]    = useState(true);
-  const [submitting, setSubmitting] = useState(false);
-  const [submitted,  setSubmitted]  = useState(false);
+  const navigate = useNavigate();
+  
+  // Get applicant info from sessionStorage (set during registration)
+  const [applicantInfo] = useState<ApplicantInfo>({
+    application_id: sessionStorage.getItem("registeredApplicantId") || "",
+    email: sessionStorage.getItem("registeredEmail") || "",
+    phone: sessionStorage.getItem("registeredPhone") || "",
+    first_name: sessionStorage.getItem("registeredFirstName") || "",
+    last_name: sessionStorage.getItem("registeredLastName") || "",
+  });
+
+  const [step,           setStep]           = useState(0);
+  const [colleges,       setColleges]       = useState<College[]>([]);
+  const [courses,        setCourses]        = useState<Course[]>([]);
+  const [cycles,         setCycles]         = useState<AdmissionCycle[]>([]);
+  const [selectedCycle,  setSelectedCycle]  = useState<AdmissionCycle | null>(null);
+  const [loading,        setLoading]        = useState(true);
+  const [submitting,     setSubmitting]     = useState(false);
+  const [submitted,      setSubmitted]      = useState(false);
+  const [admissionsOpen, setAdmissionsOpen] = useState(false);
+  const [, setAutoSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
+  const [draftLoaded,    setDraftLoaded]    = useState(false);
+  const [appId,          setAppId]          = useState<string | null>(null);
+  const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Status Checker State
   const [viewMode, setViewMode] = useState<"apply" | "status">("apply");
-  const [statusAppId, setStatusAppId] = useState("");
-  const [statusEmail, setStatusEmail] = useState("");
+  const [statusAppId, setStatusAppId] = useState(applicantInfo.application_id);
+  const [statusEmail, setStatusEmail] = useState(applicantInfo.email);
   const [statusResult, setStatusResult] = useState<any>(null);
   const [statusError, setStatusError] = useState("");
 
+  // Redirect to register if no applicant info (not registered yet)
+  useEffect(() => {
+    if (!applicantInfo.application_id) {
+      toast.error("Please complete registration first");
+      navigate("/register");
+    }
+  }, [applicantInfo.application_id, navigate]);
+
   const {
-    register, handleSubmit, watch, trigger,
-    formState: { errors },
+    register, handleSubmit, watch, trigger, setValue, reset,
+    formState: { errors, isDirty },
   } = useForm<ApplyForm>();
 
   const selectedCollege  = watch("college_id");
   const selectedCourseId = watch("course_id");
+  const selectedCycleId  = watch("cycle_id");
   const formValues       = watch();
 
   const filteredCourses = courses.filter(
     (c) => c.college_id === Number(selectedCollege)
   );
-
+  
+  // Pre-fill applicant info on mount (from registration)
   useEffect(() => {
-    Promise.all([api.get("/colleges"), api.get("/courses")]).then(
-      ([cl, co]) => {
-        setColleges(cl.data.data || []);
-        setCourses(co.data.data  || []);
-        setLoading(false);
-      }
-    );
+    if (applicantInfo.first_name) setValue("first_name", applicantInfo.first_name);
+    if (applicantInfo.last_name) setValue("last_name", applicantInfo.last_name);
   }, []);
 
+  // Load admission cycles with real-world status and check existing application status
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        // Check if application already submitted
+        if (applicantInfo.application_id) {
+          try {
+            const statusRes = await api.get(`/auth/application-status?application_id=${applicantInfo.application_id}&email=${applicantInfo.email}`);
+            const appStatus = statusRes.data.data?.status;
+            
+            if (appStatus && appStatus !== "draft") {
+              setSubmitted(true);
+              setAppId(applicantInfo.application_id);
+              toast.success(`Your application is ${appStatus.replace("_", " ")}`);
+            }
+          } catch (err) {
+            // Application not found, continue with new application
+          }
+        }
+        
+        const [cyclesRes, collegesRes, coursesRes] = await Promise.all([
+          api.get("/admissions/active-cycle"), // Use new endpoint with status
+          api.get("/colleges"),
+          api.get("/courses"),
+        ]);
+        
+        const cyclesData = cyclesRes.data.data?.cycles || [];
+        const hasOpen = cyclesRes.data.data?.has_open || false;
+        
+        setCycles(cyclesData);
+        setColleges(collegesRes.data.data || []);
+        setCourses(coursesRes.data.data || []);
+        
+        // Check if any admissions are open
+        setAdmissionsOpen(hasOpen);
+      } catch (err) {
+        console.error("Failed to load data:", err);
+        // No active cycle - that's ok, we'll show the closed message
+        setAdmissionsOpen(false);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    loadData();
+  }, [applicantInfo.application_id, applicantInfo.email]);
+
+  // Load draft using application_id
+  const loadDraft = useCallback(async (cycleId: number) => {
+    if (!applicantInfo.application_id || !cycleId || draftLoaded) return;
+    
+    try {
+      const res = await api.get(`/admissions/draft?application_id=${applicantInfo.application_id}&cycle_id=${cycleId}`);
+      if (res.data.data?.has_draft) {
+        const draftData = JSON.parse(res.data.data.draft_data);
+        reset(draftData);
+        setDraftLoaded(true);
+        toast.success("Draft loaded");
+      }
+    } catch (err) {
+      // No draft found, that's ok
+    }
+  }, [reset, draftLoaded, applicantInfo.application_id]);
+
+  // Auto-save functionality (using application_id)
+  useEffect(() => {
+    if (!isDirty || !applicantInfo.application_id || !selectedCycleId || step === 0) return;
+    
+    if (autoSaveTimeoutRef.current) {
+      clearTimeout(autoSaveTimeoutRef.current);
+    }
+    
+    setAutoSaveStatus("saving");
+    
+    autoSaveTimeoutRef.current = setTimeout(async () => {
+      if (!selectedCycleId) return;
+      
+      try {
+        await api.post("/admissions/draft", {
+          application_id: applicantInfo.application_id,
+          cycle_id: selectedCycleId,
+          draft_data: JSON.stringify(formValues),
+          program_id: selectedCourseId,
+          college_id: selectedCollege,
+        });
+        setAutoSaveStatus("saved");
+      } catch (err) {
+        setAutoSaveStatus("idle");
+      }
+    }, 3000);
+    
+    return () => {
+      if (autoSaveTimeoutRef.current) {
+        clearTimeout(autoSaveTimeoutRef.current);
+      }
+    };
+  }, [formValues, applicantInfo.application_id, selectedCycleId, isDirty, step, selectedCourseId, selectedCollege]);
+
   const stepFields: (keyof ApplyForm)[][] = [
-    ["first_name","last_name","dob","gender","phone","email","address"],
+    ["cycle_id"],
+    ["first_name","last_name","dob","gender","address"],
     ["previous_school","previous_grade","statement"],
     ["college_id","course_id"],
   ];
 
   const nextStep = async () => {
     const valid = await trigger(stepFields[step]);
-    if (valid) setStep((s) => s + 1);
+    if (valid) {
+      if (step === 0 && selectedCycleId) {
+        const cycle = cycles.find(c => c.id === selectedCycleId);
+        setSelectedCycle(cycle || null);
+      }
+      setStep((s) => s + 1);
+    }
   };
 
   const onSubmit = async (data: ApplyForm) => {
+    if (!selectedCycle) {
+      toast.error("Please select an admission cycle");
+      return;
+    }
+    
+    if (!applicantInfo.application_id) {
+      toast.error("Please complete registration first");
+      navigate("/register");
+      return;
+    }
+    
     setSubmitting(true);
     try {
-      await api.post("/auth/apply", {
+      const res = await api.post("/applications/public/submit", {
         ...data,
-        program_id: Number(data.course_id),
-        college_id: Number(data.college_id),
-        dob:        new Date(data.dob).toISOString(),
-        academic_year_id: 1, // Defaulting for demo purposes
+        application_id: applicantInfo.application_id,
+        email:          applicantInfo.email,
+        phone:          applicantInfo.phone,
+        first_name:     data.first_name || applicantInfo.first_name,
+        last_name:      data.last_name || applicantInfo.last_name,
+        program_id:     Number(data.course_id),
+        college_id:     Number(data.college_id),
+        cycle_id:       Number(data.cycle_id),
       });
+      
       setSubmitted(true);
+      setAppId(res.data.data.application_id);
       toast.success("Application submitted successfully!");
     } catch (err: any) {
       toast.error(err.response?.data?.error || "Submission failed");
@@ -129,6 +286,71 @@ export default function Apply() {
     );
   }
 
+  // ── Admissions Closed / Not Open Yet ─────────────────────────────────────
+  // Allow users with existing application to continue filling the form
+  const hasExistingApplication = !!applicantInfo.application_id;
+  
+  if (!admissionsOpen && !loading && !hasExistingApplication) {
+    const upcomingCycle = cycles.find(c => c.status === "upcoming");
+    const isUpcoming = !!upcomingCycle;
+    
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-primary-900
+                      via-primary-800 to-primary-600 flex items-center
+                      justify-center p-4">
+        <div className="bg-white rounded-2xl shadow-2xl p-10 max-w-md
+                        w-full text-center">
+          <div className={`w-20 h-20 rounded-full flex items-center
+                          justify-center mx-auto mb-6 ${isUpcoming ? 'bg-blue-100' : 'bg-amber-100'}`}>
+            <Clock className={`w-10 h-10 ${isUpcoming ? 'text-blue-600' : 'text-amber-600'}`} />
+          </div>
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">
+            {isUpcoming ? "Coming Soon" : "Admissions Closed"}
+          </h2>
+          <p className="text-gray-500 mb-4">
+            {isUpcoming 
+              ? `Admissions for ${upcomingCycle?.name} will open on ${new Date(upcomingCycle?.application_start_date).toLocaleDateString()}`
+              : "Currently, no admissions are open. Please check back later or contact the admissions office."
+            }
+          </p>
+          
+          {isUpcoming && (
+            <div className="bg-blue-50 rounded-xl p-4 mb-6">
+              <p className="text-sm text-blue-800">
+                <strong>Next Session:</strong> {upcomingCycle?.name}<br/>
+                <strong>Opens:</strong> {new Date(upcomingCycle?.application_start_date).toLocaleDateString()}<br/>
+                <strong>Closes:</strong> {new Date(upcomingCycle?.application_end_date).toLocaleDateString()}
+              </p>
+            </div>
+          )}
+          
+          <div className="flex gap-3">
+            <Link
+              to="/application-status"
+              className="flex-1 py-2.5 bg-gray-100 text-gray-700 font-semibold rounded-xl hover:bg-gray-200 transition-all text-center"
+            >
+              Track Application
+            </Link>
+            <Link
+              to="/register"
+              className={`flex-1 py-2.5 font-semibold rounded-xl transition-all text-center ${
+                isUpcoming 
+                  ? 'bg-blue-600 text-white hover:bg-blue-700' 
+                  : 'bg-primary-600 text-white hover:bg-primary-700'
+              }`}
+            >
+              {isUpcoming ? "Pre-Register" : "Check Updates"}
+            </Link>
+          </div>
+          
+          <p className="text-xs text-gray-400 mt-6">
+            📞 Admissions Helpline: 1800-123-4567 | Mon-Sat 10AM-5PM
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   // ── Success Screen ─────────────────────────────────────────────────────────
   if (submitted) {
     return (
@@ -142,49 +364,37 @@ export default function Apply() {
             <CheckCircle className="w-10 h-10 text-green-500" />
           </div>
           <h2 className="text-2xl font-bold text-gray-900 mb-2">
-            Application Submitted! 🎉
+            Application Submitted!
           </h2>
           <p className="text-gray-500 mb-2">
-            Your application is now under review by the admissions team.
+            Your application has been submitted successfully.
           </p>
-          <p className="text-sm text-gray-400 mb-8">
-            A confirmation will be sent to{" "}
-            <span className="font-semibold text-primary-600">
-              {formValues.email}
-            </span>{" "}
-            once your account is approved by the registrar.
+          <p className="text-sm text-gray-400 mb-4">
+            Application ID: <span className="font-semibold text-primary-600">{appId}</span>
           </p>
-
-          {/* Steps */}
-          <div className="bg-blue-50 rounded-xl p-4 text-left mb-6">
-            <p className="text-blue-700 text-sm font-semibold mb-3">
-              📋 What happens next?
-            </p>
-            <div className="space-y-2">
-              {[
-                "Registrar reviews your application",
-                "You get shortlisted & notified via email",
-                "Login credentials will be emailed to you",
-                "Visit college with original documents",
-              ].map((s, i) => (
-                <div key={i}
-                  className="flex items-start gap-2 text-sm text-blue-600">
-                  <span className="font-bold text-blue-400 shrink-0">
-                    {i + 1}.
-                  </span>
-                  <span>{s}</span>
-                </div>
-              ))}
+          
+          {(selectedCycle?.application_fee ?? 0) > 0 && (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-6">
+              <p className="text-amber-700 text-sm">
+                <span className="font-semibold">Next Step:</span> Complete payment of ₹{selectedCycle?.application_fee ?? 0} to proceed with your application.
+              </p>
             </div>
-          </div>
+          )}
 
-          <Link
-            to="/login"
-            className="btn-primary w-full flex items-center
-                       justify-center gap-2"
-          >
-            ← Back to Login
-          </Link>
+          <div className="flex flex-col gap-3">
+            <Link
+              to="/applicant/dashboard"
+              className="btn-primary w-full flex items-center justify-center gap-2"
+            >
+              View My Application →
+            </Link>
+            <Link
+              to="/"
+              className="text-primary-600 hover:text-primary-800 text-sm"
+            >
+              Back to Home
+            </Link>
+          </div>
         </div>
       </div>
     );
@@ -342,7 +552,7 @@ export default function Apply() {
             const isDone   = i < step;
             const isActive = i === step;
             return (
-              <React.Fragment key={i}>
+              <Fragment key={i}>
                 <div className="flex flex-col items-center">
                   <div className={`
                     w-10 h-10 rounded-full flex items-center justify-center
@@ -368,7 +578,7 @@ export default function Apply() {
                     ${i < step ? "bg-green-400" : "bg-blue-700"}`}
                   />
                 )}
-              </React.Fragment>
+              </Fragment>
             );
           })}
         </div>
@@ -379,11 +589,123 @@ export default function Apply() {
         <form onSubmit={handleSubmit(onSubmit)}>
           <div className="bg-white rounded-2xl shadow-2xl p-8">
 
-            {/* ══ STEP 0 — Personal Info ══ */}
+            {/* ══ STEP 0 — Select Admission Cycle ══ */}
             {step === 0 && (
               <div className="space-y-5">
-                <h2 className="text-xl font-bold text-gray-900 flex
-                               items-center gap-2">
+                <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                  <Calendar className="w-5 h-5 text-primary-600" />
+                  Select Admission
+                </h2>
+                <p className="text-gray-600 text-sm">
+                  Choose an available admission cycle to begin your application.
+                </p>
+
+                {/* Logged in User Info */}
+                <div className="bg-green-50 border border-green-200 rounded-xl p-4 mb-4">
+                  <div className="flex items-center justify-between mb-1">
+                    <p className="text-green-800 text-sm font-medium">Applicant</p>
+                    <span className="text-xs bg-green-200 text-green-800 px-2 py-0.5 rounded">Verified</span>
+                  </div>
+                  <p className="text-green-900 font-semibold">{applicantInfo.email}</p>
+                  {applicantInfo.phone && (
+                    <p className="text-green-700 text-sm">{applicantInfo.phone}</p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="form-label">Admission Cycle *</label>
+                  <select
+                    {...register("cycle_id", { required: "Please select an admission cycle" })}
+                    className="input-field"
+                    onChange={(e) => {
+                      const cycleId = Number(e.target.value);
+                      if (cycleId) {
+                        const cycle = cycles.find(c => c.id === cycleId);
+                        setSelectedCycle(cycle || null);
+                        // Load draft using application_id
+                        if (applicantInfo.application_id) {
+                          loadDraft(cycleId);
+                        }
+                      }
+                    }}
+                  >
+                    <option value="">— Select an open admission cycle —</option>
+                    {cycles.filter(c => c.status === "open" || c.status === "upcoming").map((cycle) => (
+                      <option 
+                        key={cycle.id} 
+                        value={cycle.id}
+                        disabled={cycle.status !== "open"}
+                      >
+                        {cycle.name} 
+                        {cycle.status === "open" 
+                          ? `(Open - ${cycle.days_until_close ?? 0} days left)` 
+                          : `(Opens ${new Date(cycle.application_start_date).toLocaleDateString()})`
+                        }
+                        {cycle.application_fee > 0 ? ` - Fee: ₹${cycle.application_fee}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                  {errors.cycle_id && (
+                    <p className="text-red-500 text-xs mt-1">
+                      {errors.cycle_id.message}
+                    </p>
+                  )}
+                  
+                  {/* Status Legend */}
+                  <div className="flex gap-3 mt-2 text-xs">
+                    <span className="flex items-center gap-1">
+                      <span className="w-2 h-2 rounded-full bg-green-500"></span>
+                      Open
+                    </span>
+                    <span className="flex items-center gap-1 text-gray-400">
+                      <span className="w-2 h-2 rounded-full bg-blue-400"></span>
+                      Upcoming
+                    </span>
+                  </div>
+                </div>
+
+                {selectedCycle && (
+                  <div className={`rounded-xl p-4 ${selectedCycle.status === 'open' ? 'bg-green-50 border border-green-200' : 'bg-blue-50 border border-blue-200'}`}>
+                    <div className="flex items-center justify-between mb-2">
+                      <h3 className={`font-semibold ${selectedCycle.status === 'open' ? 'text-green-900' : 'text-blue-900'}`}>
+                        {selectedCycle.name}
+                      </h3>
+                      <span className={`text-xs px-2 py-0.5 rounded ${
+                        selectedCycle.status === 'open' 
+                          ? 'bg-green-200 text-green-800' 
+                          : 'bg-blue-200 text-blue-800'
+                      }`}>
+                        {selectedCycle.status === 'open' ? `Open - ${selectedCycle.days_until_close ?? 0} days left` : 'Upcoming'}
+                      </span>
+                    </div>
+                    <p className={`text-sm mb-2 ${selectedCycle.status === 'open' ? 'text-green-700' : 'text-blue-700'}`}>
+                      {selectedCycle.description}
+                    </p>
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                      <div>
+                        <span className={selectedCycle.status === 'open' ? 'text-green-600' : 'text-blue-600'}>Application Fee:</span>
+                        <span className="ml-1 font-semibold">₹{selectedCycle.application_fee}</span>
+                      </div>
+                      <div>
+                        <span className={selectedCycle.status === 'open' ? 'text-green-600' : 'text-blue-600'}>Admission Fee:</span>
+                        <span className="ml-1 font-semibold">₹{selectedCycle.admission_fee}</span>
+                      </div>
+                    </div>
+                    
+                    {selectedCycle.status === 'open' && (selectedCycle.days_until_close ?? 0) <= 7 && (
+                      <div className="mt-3 bg-amber-100 text-amber-800 text-xs p-2 rounded">
+                        Hurry! Only {selectedCycle.days_until_close ?? 0} days left to apply.
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ══ STEP 1 — Personal Info ══ */}
+            {step === 1 && (
+              <div className="space-y-5">
+                <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
                   <User className="w-5 h-5 text-primary-600" />
                   Personal Information
                 </h2>
@@ -446,31 +768,19 @@ export default function Apply() {
                     )}
                   </div>
 
-                  <div>
-                    <label className="form-label">Phone *</label>
-                    <input
-                      {...register("phone", { required: "Required" })}
-                      className="input-field" placeholder="9876543210"
-                    />
-                    {errors.phone && (
-                      <p className="text-red-500 text-xs mt-1">
-                        {errors.phone.message}
+                  {/* Show email/phone from registration (read-only) */}
+                  <div className="sm:col-span-2 bg-gray-50 rounded-lg p-3">
+                    <p className="text-sm text-gray-600">
+                      <span className="font-medium">Email:</span> {applicantInfo.email}
+                    </p>
+                    {applicantInfo.phone && (
+                      <p className="text-sm text-gray-600 mt-1">
+                        <span className="font-medium">Phone:</span> {applicantInfo.phone}
                       </p>
                     )}
-                  </div>
-
-                  <div>
-                    <label className="form-label">Email *</label>
-                    <input
-                      {...register("email", { required: "Required" })}
-                      type="email" className="input-field"
-                      placeholder="john@example.com"
-                    />
-                    {errors.email && (
-                      <p className="text-red-500 text-xs mt-1">
-                        {errors.email.message}
-                      </p>
-                    )}
+                    <p className="text-xs text-gray-400 mt-2">
+                      Contact info verified during registration. Cannot be changed.
+                    </p>
                   </div>
                 </div>
 
@@ -514,8 +824,8 @@ export default function Apply() {
               </div>
             )}
 
-            {/* ══ STEP 1 — Academic Info ══ */}
-            {step === 1 && (
+            {/* ══ STEP 2 — Academic Info ══ */}
+            {step === 2 && (
               <div className="space-y-5">
                 <h2 className="text-xl font-bold text-gray-900 flex
                                items-center gap-2">
@@ -575,8 +885,8 @@ export default function Apply() {
               </div>
             )}
 
-            {/* ══ STEP 2 — Course Selection ══ */}
-            {step === 2 && (
+            {/* ══ STEP 3 — Course Selection ══ */}
+            {step === 3 && (
               <div className="space-y-5">
                 <h2 className="text-xl font-bold text-gray-900 flex
                                items-center gap-2">
@@ -674,8 +984,8 @@ export default function Apply() {
               </div>
             )}
 
-            {/* ══ STEP 3 — Review ══ */}
-            {step === 3 && (
+            {/* ══ STEP 4 — Review ══ */}
+            {step === 4 && (
               <div className="space-y-5">
                 <h2 className="text-xl font-bold text-gray-900 flex
                                items-center gap-2">

@@ -172,14 +172,19 @@ export interface AdmissionApplication {
 }
 
 export type ApplicationStatus = 
-  | 'Draft'
-  | 'Submitted' 
-  | 'UnderReview' 
-  | 'Shortlisted' 
-  | 'Selected' 
-  | 'Admitted' 
-  | 'Rejected' 
-  | 'Waitlisted';
+  | 'draft'
+  | 'submitted'
+  | 'payment_pending'
+  | 'payment_completed'
+  | 'under_review'
+  | 'shortlisted'
+  | 'document_verification'
+  | 'admission_fee_pending'
+  | 'admission_fee_paid'
+  | 'enrolled'
+  | 'rejected'
+  | 'waitlisted'
+  | 'cancelled';
 
 export interface ApplicationDocument {
   id: number;
@@ -192,6 +197,124 @@ export interface ApplicationDocument {
   is_verified: boolean;
   verified_at?: string;
   remarks?: string;
+}
+
+// Admission Cycle - Controls when admissions are open
+export interface AdmissionCycle {
+  id: number;
+  created_at?: string;
+  updated_at?: string;
+  academic_year_id: number;
+  academic_year?: {
+    id: number;
+    year_label: string;
+  };
+  name: string;
+  description?: string;
+  application_start_date: string;
+  application_end_date: string;
+  is_active: boolean;
+  is_published: boolean;
+  program_id?: number;
+  program?: {
+    id: number;
+    name: string;
+    code: string;
+  };
+  college_id?: number;
+  college?: {
+    id: number;
+    name: string;
+    code: string;
+  };
+  application_fee: number;
+  admission_fee: number;
+  max_applications: number;
+  total_applications?: number;
+  created_by?: string;
+  // Computed fields from backend
+  status?: 'open' | 'upcoming' | 'closed';
+  days_until_close?: number;
+}
+
+// Applicant (Pre-enrollment application)
+export interface Applicant {
+  id: number;
+  application_id: string;
+  admission_cycle_id?: number;
+  admission_cycle?: AdmissionCycle;
+  program_id: number;
+  program?: {
+    id: number;
+    name: string;
+    code: string;
+  };
+  college_id: number;
+  college?: {
+    id: number;
+    name: string;
+    code: string;
+  };
+  academic_year_id: number;
+  
+  // Personal Info
+  first_name: string;
+  last_name: string;
+  email: string;
+  phone?: string;
+  dob?: string;
+  gender?: string;
+  category?: string;
+  state?: string;
+  city?: string;
+  address?: string;
+  pincode?: string;
+  
+  // Academic Info
+  previous_school?: string;
+  previous_grade?: string;
+  previous_percentage?: number;
+  year_of_passing?: number;
+  entrance_exam?: string;
+  entrance_score?: number;
+  merit_rank?: number;
+  
+  // Statement
+  statement?: string;
+  
+  // Status
+  status: ApplicationStatus;
+  rejection_reason?: string;
+  remarks?: string;
+  
+  // Payment
+  application_fee: number;
+  application_fee_paid: boolean;
+  application_fee_payment_id?: string;
+  admission_fee: number;
+  admission_fee_paid: boolean;
+  admission_fee_payment_id?: string;
+  
+  // Documents
+  documents_uploaded: boolean;
+  documents_verified: boolean;
+  
+  // Draft
+  draft_data?: string;
+  draft_saved_at?: string;
+  
+  // Timestamps
+  submitted_at?: string;
+  payment_completed_at?: string;
+  reviewed_at?: string;
+  shortlisted_at?: string;
+  documents_verified_at?: string;
+  admission_fee_paid_at?: string;
+  enrolled_at?: string;
+  
+  // Student link
+  student_id?: number;
+  student?: Student;
 }
 
 // Certificate/Document Request
@@ -256,6 +379,3 @@ export interface Grievance {
   resolution?: string;
   satisfaction_rating?: number;
 }
-
-// Import for circular dependency resolution
-import type { Faculty } from './faculty';
