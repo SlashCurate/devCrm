@@ -174,20 +174,52 @@ func CreateCourse(w http.ResponseWriter, r *http.Request) {
 func ListCourses(w http.ResponseWriter, r *http.Request) {
 	claims := middleware.GetClaims(r)
 
-	var courses []models.Program
-	query := db.DB.Preload("Department")
+	var programs []models.Program
+	query := db.DB.Preload("Department.College")
 
 	// SAFE CHECK (prevents panic)
 	if claims != nil &&
 		claims.Role == models.RoleCollegeAdmin &&
 		claims.CollegeID != nil {
-		query = query.Joins("JOIN core.departments ON programs.department_id = departments.id").
+		query = query.Joins("JOIN core.departments ON programs.department_id = departments.department_id").
 			Where("departments.college_id = ?", *claims.CollegeID)
 	}
 
-	if err := query.Find(&courses).Error; err != nil {
+	if err := query.Find(&programs).Error; err != nil {
 		utils.ErrorResponse(w, http.StatusInternalServerError, "Failed to fetch courses")
 		return
+	}
+
+	// Get filled seats count for each program
+	var filledSeatsMap = make(map[uint]int)
+	var studentCounts []struct {
+		ProgramID uint
+		Count     int
+	}
+	db.DB.Model(&models.Student{}).
+		Select("program_id, COUNT(*) as count").
+		Where("program_id IS NOT NULL AND is_active = ?", true).
+		Group("program_id").
+		Scan(&studentCounts)
+	for _, sc := range studentCounts {
+		filledSeatsMap[sc.ProgramID] = sc.Count
+	}
+
+	// Map to response with college_id and filled_seats included
+	type CourseResponse struct {
+		models.Program
+		CollegeID   uint `json:"college_id"`
+		FilledSeats int  `json:"filled_seats"`
+	}
+
+	var courses []CourseResponse
+	for _, p := range programs {
+		course := CourseResponse{
+			Program:     p,
+			CollegeID:   p.Department.CollegeID,
+			FilledSeats: filledSeatsMap[p.ID],
+		}
+		courses = append(courses, course)
 	}
 
 	utils.JSONResponse(w, http.StatusOK, true, "Courses fetched", courses)

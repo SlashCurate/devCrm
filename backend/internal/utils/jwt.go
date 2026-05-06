@@ -23,7 +23,7 @@ func GenerateToken(userID string, email, role string, collegeID *uint) (string, 
 		Role:      role,
 		CollegeID: collegeID,
 		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(12 * time.Hour)), //time for token to expire
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 		},
 	}

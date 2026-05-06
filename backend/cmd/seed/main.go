@@ -175,7 +175,7 @@ db.DB.Create(&inv1)
 db.DB.Create(&models.Payment{InvoiceID: inv1.ID, StudentID: student1.ID, AmountPaid: 63000, PaymentDate: time.Now(), PaymentMode: "UPI", Status: models.PaymentSuccess, IsVerified: true})
 
 // TIMETABLE & ATTENDANCE
-tt := models.Timetable{ProgramID: btechCSE.ID, SubjectID: subCSE1.ID, FacultyID: fac1.ID, SemesterID: sem1.ID, Section: "A", DayOfWeek: 1, StartTime: time.Date(0,0,0,9,0,0,0,time.UTC), EndTime: time.Date(0,0,0,10,0,0,0,time.UTC), IsActive: true}
+tt := models.Timetable{ProgramID: btechCSE.ID, SubjecFtID: subCSE1.ID, FacultyID: fac1.ID, SemesterID: sem1.ID, Section: "A", DayOfWeek: 1, StartTime: time.Date(0,0,0,9,0,0,0,time.UTC), EndTime: time.Date(0,0,0,10,0,0,0,time.UTC), IsActive: true}
 db.DB.Create(&tt)
 db.DB.Create(&models.Enrollment{StudentID: student1.ID, SubjectID: subCSE1.ID, SemesterID: sem1.ID, Status: "Active"})
 db.DB.Create(&models.Attendance{StudentID: student1.ID, SubjectID: subCSE1.ID, FacultyID: &fac1.ID, SemesterID: sem1.ID, AttendanceDate: time.Now(), Status: "Present"})

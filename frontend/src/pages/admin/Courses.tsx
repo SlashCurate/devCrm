@@ -148,7 +148,7 @@ export default function AdminCourses() {
                 Duration (Years)
               </label>
               <input
-                {...register("duration", { required: "Required" })}
+                {...register("duration_years", { required: "Required" })}
                 type="number"
                 className="input-field"
                 placeholder="4"

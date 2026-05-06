@@ -67,10 +67,10 @@ export default function Apply() {
   const [submitting,     setSubmitting]     = useState(false);
   const [submitted,      setSubmitted]      = useState(false);
   const [admissionsOpen, setAdmissionsOpen] = useState(false);
-  const [, setAutoSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
+  
   const [draftLoaded,    setDraftLoaded]    = useState(false);
   const [appId,          setAppId]          = useState<string | null>(null);
-  const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  
 
   // Status Checker State
   const [viewMode, setViewMode] = useState<"apply" | "status">("apply");
@@ -87,15 +87,26 @@ export default function Apply() {
     }
   }, [applicantInfo.application_id, navigate]);
 
-  const {
-    register, handleSubmit, watch, trigger, setValue, reset,
-    formState: { errors, isDirty },
-  } = useForm<ApplyForm>();
+const {
+  register,
+  handleSubmit,
+  watch,
+  trigger,
+  setValue,
+  reset,
+  getValues,
+  formState: { errors },
+} = useForm<ApplyForm>();
+
+
 
   const selectedCollege  = watch("college_id");
   const selectedCourseId = watch("course_id");
   const selectedCycleId  = watch("cycle_id");
-  const formValues       = watch();
+
+const formValues = getValues();
+
+
 
   const filteredCourses = courses.filter(
     (c) => c.college_id === Number(selectedCollege)
@@ -172,38 +183,6 @@ export default function Apply() {
   }, [reset, draftLoaded, applicantInfo.application_id]);
 
   // Auto-save functionality (using application_id)
-  useEffect(() => {
-    if (!isDirty || !applicantInfo.application_id || !selectedCycleId || step === 0) return;
-    
-    if (autoSaveTimeoutRef.current) {
-      clearTimeout(autoSaveTimeoutRef.current);
-    }
-    
-    setAutoSaveStatus("saving");
-    
-    autoSaveTimeoutRef.current = setTimeout(async () => {
-      if (!selectedCycleId) return;
-      
-      try {
-        await api.post("/admissions/draft", {
-          application_id: applicantInfo.application_id,
-          cycle_id: selectedCycleId,
-          draft_data: JSON.stringify(formValues),
-          program_id: selectedCourseId,
-          college_id: selectedCollege,
-        });
-        setAutoSaveStatus("saved");
-      } catch (err) {
-        setAutoSaveStatus("idle");
-      }
-    }, 3000);
-    
-    return () => {
-      if (autoSaveTimeoutRef.current) {
-        clearTimeout(autoSaveTimeoutRef.current);
-      }
-    };
-  }, [formValues, applicantInfo.application_id, selectedCycleId, isDirty, step, selectedCourseId, selectedCollege]);
 
   const stepFields: (keyof ApplyForm)[][] = [
     ["cycle_id"],
@@ -212,52 +191,131 @@ export default function Apply() {
     ["college_id","course_id"],
   ];
 
-  const nextStep = async () => {
-    const valid = await trigger(stepFields[step]);
-    if (valid) {
-      if (step === 0 && selectedCycleId) {
-        const cycle = cycles.find(c => c.id === selectedCycleId);
-        setSelectedCycle(cycle || null);
-      }
-      setStep((s) => s + 1);
-    }
-  };
 
-  const onSubmit = async (data: ApplyForm) => {
-    if (!selectedCycle) {
-      toast.error("Please select an admission cycle");
-      return;
-    }
-    
-    if (!applicantInfo.application_id) {
-      toast.error("Please complete registration first");
-      navigate("/register");
-      return;
-    }
-    
-    setSubmitting(true);
-    try {
-      const res = await api.post("/applications/public/submit", {
-        ...data,
-        application_id: applicantInfo.application_id,
-        email:          applicantInfo.email,
-        phone:          applicantInfo.phone,
-        first_name:     data.first_name || applicantInfo.first_name,
-        last_name:      data.last_name || applicantInfo.last_name,
-        program_id:     Number(data.course_id),
-        college_id:     Number(data.college_id),
-        cycle_id:       Number(data.cycle_id),
-      });
-      
-      setSubmitted(true);
-      setAppId(res.data.data.application_id);
-      toast.success("Application submitted successfully!");
-    } catch (err: any) {
-      toast.error(err.response?.data?.error || "Submission failed");
-    } finally {
-      setSubmitting(false);
-    }
-  };
+const saveDraftNow = async () => {
+
+  if (!selectedCycleId) return true;
+
+  try {
+
+    const values = getValues();
+
+    await api.post("/admissions/draft", {
+      application_id: applicantInfo.application_id,
+      cycle_id: Number(selectedCycleId),
+
+      draft_data: JSON.stringify(values),
+
+      program_id: Number(values.course_id || 0),
+      college_id: Number(values.college_id || 0),
+      email: applicantInfo.email,
+      phone: applicantInfo.phone,
+    });
+
+    toast.success("Progress saved");
+
+    return true;
+
+  } catch (err) {
+
+    console.error("SAVE ERROR:", err);
+
+    toast.error("Failed to save progress");
+
+    return false;
+  }
+};
+
+
+
+const nextStep = async () => {
+  const valid = await trigger(stepFields[step]);
+
+  if (!valid) return;
+
+  // save before moving
+  const saved = await saveDraftNow();
+
+  if (!saved) return;
+
+  if (step === 0 && selectedCycleId) {
+    const cycle = cycles.find(c => c.id === selectedCycleId);
+    setSelectedCycle(cycle || null);
+  }
+
+  setStep((s) => s + 1);
+};
+
+const onSubmit = async (data: ApplyForm) => {
+  if (!selectedCycle) {
+    toast.error("Please select an admission cycle");
+    return;
+  }
+
+  if (!applicantInfo.application_id) {
+    toast.error("Please complete registration first");
+    navigate("/register");
+    return;
+  }
+
+  setSubmitting(true);
+
+  try {
+    const payload = {
+      application_id: applicantInfo.application_id,
+
+      cycle_id: Number(data.cycle_id),
+
+      // IMPORTANT
+      program_id: Number(data.course_id),
+
+      college_id: Number(data.college_id),
+
+      // Personal Info
+      first_name: data.first_name,
+      last_name: data.last_name,
+      email: applicantInfo.email,
+      phone: applicantInfo.phone,
+
+      dob: data.dob,
+      gender: data.gender,
+      address: data.address,
+      city: data.city,
+      state: data.state,
+      pin_code: data.pin_code,
+
+      // Academic
+      previous_school: data.previous_school,
+      previous_grade: data.previous_grade,
+      statement: data.statement,
+    };
+
+    console.log("SUBMIT PAYLOAD:", payload);
+
+    const res = await api.post(
+      "/applications/public/submit",
+      payload
+    );
+
+    setSubmitted(true);
+    setAppId(res.data.data.application_id);
+
+    toast.success("Application submitted successfully!");
+
+  } catch (err: any) {
+
+    console.error("SUBMIT ERROR:", err?.response?.data);
+
+    toast.error(
+      err?.response?.data?.error ||
+      err?.response?.data?.message ||
+      "Submission failed"
+    );
+
+  } finally {
+    setSubmitting(false);
+  }
+};
 
   const handleCheckStatus = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -614,8 +672,11 @@ export default function Apply() {
 
                 <div>
                   <label className="form-label">Admission Cycle *</label>
-                  <select
-                    {...register("cycle_id", { required: "Please select an admission cycle" })}
+                 <select
+  {...register("cycle_id", { 
+    required: "Please select an admission cycle",
+    valueAsNumber: true   
+  })}
                     className="input-field"
                     onChange={(e) => {
                       const cycleId = Number(e.target.value);
@@ -897,8 +958,11 @@ export default function Apply() {
                 {/* College Dropdown */}
                 <div>
                   <label className="form-label">Select College *</label>
-                  <select
-                    {...register("college_id", { required: "Required" })}
+                 <select
+  {...register("college_id", { 
+    required: "Required",
+    valueAsNumber: true
+  })}
                     className="input-field"
                   >
                     <option value="">— Choose a college —</option>
@@ -927,7 +991,7 @@ export default function Apply() {
                     ) : (
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         {filteredCourses.map((c) => {
-                          const available = c.total_seats - c.filled_seats;
+                          const available = c.total_seats;
                           const isSelected =
                             Number(selectedCourseId) === c.id;
                           return (
@@ -942,16 +1006,16 @@ export default function Apply() {
                                 }`}
                             >
                               <input
-                                {...register("course_id",
-                                  { required: "Please select a course" })}
-                                type="radio"
-                                value={c.id}
-                                className="mt-0.5 accent-primary-600"
-                              />
+  {...register("course_id",
+    { required: "Please select a course", valueAsNumber: true })}
+  type="radio"
+  value={c.id}
+  className="mt-0.5 accent-primary-600"
+/>
                               <div className="flex-1">
                                 <p className="font-semibold text-gray-900
                                              text-sm">
-                                  {c.name}
+                                  {(c as any).department?.name ? `${(c as any).department.name} - ${c.name}` : c.name}
                                 </p>
                                 <p className="text-xs text-gray-500 mt-0.5">
                                   {c.code} • {c.duration_years} Years

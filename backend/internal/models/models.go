@@ -3,7 +3,7 @@ package models
 import (
 	"time"
 
-	"github.com/google/uuid"
+	// "github.com/google/uuid"
 )
 
 // ==================== ROLES ====================
@@ -1390,8 +1390,8 @@ type Applicant struct {
 	UpdatedAt       time.Time
 	
 	// User Account Reference (for authenticated applicants)
-	UserID          *uuid.UUID `gorm:"type:uuid;index"`
-	User            *User      `gorm:"foreignKey:UserID"`
+	// UserID          *uuid.UUID `gorm:"type:uuid;index"`
+	// User            *User      `gorm:"foreignKey:UserID"`
 	
 	// Application ID
 	ApplicationID   string `gorm:"uniqueIndex;not null"` // APP-2024-XXXX

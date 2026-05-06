@@ -404,7 +404,7 @@ export default function AdmissionCycles() {
                 <div className="relative">
                   <select
                     required
-                    value={formData.academic_year_id}
+                    value={formData.academic_year_id || ""}
                     onChange={(e) => setFormData({ ...formData, academic_year_id: Number(e.target.value) })}
                     className="input-field appearance-none pr-10"
                   >

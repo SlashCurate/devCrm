@@ -3,7 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
-	"math/rand"
+	
 	"net/http"
 	"time"
 	"university-erp-backend/internal/db"
@@ -11,7 +11,7 @@ import (
 	"university-erp-backend/internal/models"
 	"university-erp-backend/internal/utils"
 
-	"github.com/google/uuid"
+	// "github.com/google/uuid"
 	"github.com/gorilla/mux"
 	"golang.org/x/crypto/bcrypt"
 	
@@ -19,157 +19,215 @@ import (
 
 // ==================== PUBLIC: SUBMIT APPLICATION ====================
 func PublicSubmitApplication(w http.ResponseWriter, r *http.Request) {
+
 	var req struct {
-		models.Applicant
-		CycleID uint   `json:"cycle_id"`
-		UserID  string `json:"user_id"` // Optional: for authenticated users
+		ApplicationID string `json:"application_id"`
+
+		CycleID   uint `json:"cycle_id"`
+		ProgramID uint `json:"program_id"`
+		CollegeID uint `json:"college_id"`
+
+		FirstName string `json:"first_name"`
+		LastName  string `json:"last_name"`
+
+		Email string `json:"email"`
+		Phone string `json:"phone"`
+
+		DOB      string `json:"dob"`
+		Gender   string `json:"gender"`
+		Address  string `json:"address"`
+		City     string `json:"city"`
+		State    string `json:"state"`
+		Pincode  string `json:"pin_code"`
+		Category string `json:"category"`
+
+		PreviousSchool string `json:"previous_school"`
+		PreviousGrade  string `json:"previous_grade"`
+
+		Statement string `json:"statement"`
 	}
+
+	// Decode request
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		utils.ErrorResponse(w, http.StatusBadRequest, "Invalid request body")
 		return
 	}
 
-	// Validate required fields
-	if req.Email == "" || req.FirstName == "" || req.LastName == "" {
-		utils.ErrorResponse(w, http.StatusBadRequest, "Email, First Name, and Last Name are required")
+	// Required validations
+	if req.ApplicationID == "" {
+		utils.ErrorResponse(w, http.StatusBadRequest, "Application ID is required")
 		return
 	}
 
-	// Check if admission cycle is provided
-	if req.CycleID == 0 && req.AdmissionCycleID == nil {
+	if req.Email == "" {
+		utils.ErrorResponse(w, http.StatusBadRequest, "Email is required")
+		return
+	}
+
+	if req.FirstName == "" || req.LastName == "" {
+		utils.ErrorResponse(w, http.StatusBadRequest, "First Name and Last Name are required")
+		return
+	}
+
+	if req.CycleID == 0 {
 		utils.ErrorResponse(w, http.StatusBadRequest, "Admission cycle is required")
 		return
 	}
-	
-	cycleID := req.CycleID
-	if cycleID == 0 && req.AdmissionCycleID != nil {
-		cycleID = *req.AdmissionCycleID
-	}
 
-	// Verify admission cycle is active and open
+	// Validate admission cycle
 	var cycle models.AdmissionCycle
-	if err := db.DB.First(&cycle, cycleID).Error; err != nil {
+
+	if err := db.DB.First(&cycle, req.CycleID).Error; err != nil {
 		utils.ErrorResponse(w, http.StatusBadRequest, "Invalid admission cycle")
 		return
 	}
 
 	if !cycle.IsOpen() {
-		utils.ErrorResponse(w, http.StatusBadRequest, "Admissions are currently closed for this cycle")
+		utils.ErrorResponse(w, http.StatusBadRequest, "Admissions are currently closed")
 		return
 	}
 
-	// Check if max applications limit reached
-	if cycle.MaxApplications > 0 {
-		var count int64
-		db.DB.Model(&models.Applicant{}).Where("admission_cycle_id = ?", cycle.ID).Count(&count)
-		if int(count) >= cycle.MaxApplications {
-			utils.ErrorResponse(w, http.StatusBadRequest, "Application limit reached for this cycle")
-			return
+	// Parse DOB
+	var parsedDOB *time.Time
+
+	if req.DOB != "" {
+		dob, err := time.Parse("2006-01-02", req.DOB)
+		if err == nil {
+			parsedDOB = &dob
 		}
 	}
 
-	// Check if user already has an application for this cycle (by user_id or email)
-	var existingApp models.Applicant
-	var checkErr error
-	
-	if req.UserID != "" {
-		// Check by user_id for authenticated users
-		checkErr = db.DB.Where("user_id::text = ? AND admission_cycle_id = ? AND status != ?", 
-			req.UserID, cycle.ID, models.ApplicationDraft).First(&existingApp).Error
-	} else {
-		// Check by email for legacy/public users
-		checkErr = db.DB.Where("email = ? AND admission_cycle_id = ? AND status != ?", 
-			req.Email, cycle.ID, models.ApplicationDraft).First(&existingApp).Error
-	}
-	
-	if checkErr == nil {
-		utils.ErrorResponse(w, http.StatusConflict, "You already have an application for this admission cycle")
+	// Check if already submitted
+	var existing models.Applicant
+
+
+err := db.DB.Where(
+	"application_id = ? AND status != ?",
+	req.ApplicationID,
+	models.ApplicationDraft,
+).First(&existing).Error
+
+
+
+	if err == nil {
+		utils.ErrorResponse(w, http.StatusConflict, "Application already submitted")
 		return
 	}
 
-	// Check if draft exists and update it
+	// Find existing draft
 	var draft models.Applicant
-	var err error
-	
-	if req.UserID != "" {
-		// Find draft by user_id
-		err = db.DB.Where("user_id::text = ? AND admission_cycle_id = ? AND status = ?", 
-			req.UserID, cycle.ID, models.ApplicationDraft).First(&draft).Error
-	} else {
-		// Find draft by email
-		err = db.DB.Where("email = ? AND admission_cycle_id = ? AND status = ?", 
-			req.Email, cycle.ID, models.ApplicationDraft).First(&draft).Error
-	}
 
-	// Generate Application ID (APP-YYYY-XXXX)
-	year := time.Now().Year()
-	randSuffix := rand.Intn(9000) + 1000 // 4 digits
-	appID := fmt.Sprintf("APP-%d-%04d", year, randSuffix)
+
+err = db.DB.Where(
+	"application_id = ?",
+	req.ApplicationID,
+).First(&draft).Error
+
+
 
 	now := time.Now()
 
+	// Update existing draft
 	if err == nil {
-		// Update draft to submitted
-		draft.ApplicationID = appID
-		draft.Status = models.ApplicationSubmitted
-		draft.SubmittedAt = &now
-		draft.FirstName = req.FirstName
-		draft.LastName = req.LastName
-		draft.Phone = req.Phone
-		draft.DOB = req.DOB
-		draft.Gender = req.Gender
-		draft.Category = req.Category
-		draft.State = req.State
-		draft.City = req.City
-		draft.Address = req.Address
-		draft.Pincode = req.Pincode
-		draft.PreviousSchool = req.PreviousSchool
-		draft.PreviousGrade = req.PreviousGrade
-		draft.Statement = req.Statement
-		draft.ApplicationFee = cycle.ApplicationFee
-		draft.AdmissionFee = cycle.AdmissionFee
-		
-		if err := db.DB.Save(&draft).Error; err != nil {
+
+		updates := map[string]interface{}{
+			"status":            models.ApplicationSubmitted,
+			"submitted_at":      &now,
+
+			"program_id":        req.ProgramID,
+			"college_id":        req.CollegeID,
+
+			"first_name":        req.FirstName,
+			"last_name":         req.LastName,
+			"phone":             req.Phone,
+
+			"dob":               parsedDOB,
+			"gender":            req.Gender,
+			"category":          req.Category,
+
+			"state":             req.State,
+			"city":              req.City,
+			"address":           req.Address,
+			"pincode":           req.Pincode,
+
+			"previous_school":   req.PreviousSchool,
+			"previous_grade":    req.PreviousGrade,
+
+			"statement":         req.Statement,
+
+			"application_fee":   cycle.ApplicationFee,
+			"admission_fee":     cycle.AdmissionFee,
+			"academic_year_id":  cycle.AcademicYearID,
+		}
+
+		if err := db.DB.Model(&draft).Updates(updates).Error; err != nil {
 			utils.ErrorResponse(w, http.StatusInternalServerError, "Failed to submit application")
 			return
 		}
+
 	} else {
-		// Create new application
-		req.Applicant.ApplicationID = appID
-		req.Applicant.AdmissionCycleID = &cycleID
-		req.Applicant.Status = models.ApplicationSubmitted
-		req.Applicant.SubmittedAt = &now
-		req.Applicant.ApplicationFee = cycle.ApplicationFee
-		req.Applicant.AdmissionFee = cycle.AdmissionFee
-		
-		// Set user_id if provided (authenticated applicant)
-		if req.UserID != "" {
-			uid, parseErr := uuid.Parse(req.UserID)
-			if parseErr == nil {
-				req.Applicant.UserID = &uid
-			}
+
+		// Create fresh submitted application
+		applicant := models.Applicant{
+			ApplicationID:    req.ApplicationID,
+			AdmissionCycleID: &req.CycleID,
+
+			ProgramID:       req.ProgramID,
+			CollegeID:       req.CollegeID,
+			AcademicYearID:  cycle.AcademicYearID,
+
+			FirstName: req.FirstName,
+			LastName:  req.LastName,
+
+			Email: req.Email,
+			Phone: req.Phone,
+
+			DOB:      parsedDOB,
+			Gender:   req.Gender,
+			Category: req.Category,
+
+			State:    req.State,
+			City:     req.City,
+			Address:  req.Address,
+			Pincode:  req.Pincode,
+
+			PreviousSchool: req.PreviousSchool,
+			PreviousGrade:  req.PreviousGrade,
+
+			Statement: req.Statement,
+DraftData: "{}",
+			Status:          models.ApplicationSubmitted,
+			SubmittedAt:     &now,
+
+			ApplicationFee: cycle.ApplicationFee,
+			AdmissionFee:   cycle.AdmissionFee,
 		}
 
-		if err := db.DB.Create(&req.Applicant).Error; err != nil {
+		if err := db.DB.Create(&applicant).Error; err != nil {
 			utils.ErrorResponse(w, http.StatusInternalServerError, "Failed to submit application")
 			return
 		}
 	}
 
-	// Notify admins (if real-time is set up) or email student
-	go utils.SendNotificationEmail(req.Email, 
-		"Application Submitted Successfully", 
-		fmt.Sprintf("Your application ID is: %s\n\nStatus: Submitted\nNext Step: Complete payment of ₹%.2f to proceed with your application.", 
-			appID, cycle.ApplicationFee))
+	// Send confirmation email
+	go utils.SendNotificationEmail(
+		req.Email,
+		"Application Submitted Successfully",
+		fmt.Sprintf(
+			"Your application has been submitted successfully.\n\nApplication ID: %s",
+			req.ApplicationID,
+		),
+	)
 
 	utils.JSONResponse(w, http.StatusCreated, true, "Application submitted successfully", map[string]interface{}{
-		"application_id":    appID,
-		"status":           models.ApplicationSubmitted,
-		"application_fee":  cycle.ApplicationFee,
-		"admission_fee":    cycle.AdmissionFee,
-		"requires_payment": cycle.ApplicationFee > 0,
+		"application_id": req.ApplicationID,
+		"status":         models.ApplicationSubmitted,
+		"submitted_at":   now,
+		"application_fee": cycle.ApplicationFee,
+		"admission_fee":   cycle.AdmissionFee,
 	})
 }
+
 
 // ==================== PUBLIC: CHECK STATUS ====================
 func PublicCheckApplicationStatus(w http.ResponseWriter, r *http.Request) {
@@ -355,7 +413,7 @@ func EnrollStudent(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// ==================== ADMISSION CYCLE MANAGEMENT ====================
+// ==================== ADMISSION CYCLE MANAGEFENT ====================
 
 // ListAdmissionCycles - Get all admission cycles (public)
 func ListAdmissionCycles(w http.ResponseWriter, r *http.Request) {
@@ -678,98 +736,117 @@ func GetApplicationDraft(w http.ResponseWriter, r *http.Request) {
 }
 
 // SaveApplicationDraft - Auto-save draft application (application_id, user_id, or email based)
+
 func SaveApplicationDraft(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		ApplicationID  string `json:"application_id"` // Application ID from registration
-		UserID         string `json:"user_id"`        // UUID from auth
-		Email          string `json:"email"`          // Legacy support
-		CycleID        uint   `json:"cycle_id"`
-		DraftData      string `json:"draft_data"`     // JSON string
-		ProgramID      uint   `json:"program_id"`
-		CollegeID      uint   `json:"college_id"`
+		ApplicationID string `json:"application_id"`
+		UserID        string `json:"user_id"`
+		Email         string `json:"email"`
+		CycleID       uint   `json:"cycle_id"`
+		DraftData     string `json:"draft_data"`
+		ProgramID     uint   `json:"program_id"`
+		CollegeID     uint   `json:"college_id"`
 	}
-	
+
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		utils.ErrorResponse(w, http.StatusBadRequest, "Invalid request body")
 		return
 	}
-	
+
 	if req.ApplicationID == "" && req.UserID == "" && req.Email == "" {
 		utils.ErrorResponse(w, http.StatusBadRequest, "application_id, user_id, or email is required")
 		return
 	}
-	
+
 	now := time.Now()
-	
-	// Try to find existing draft
+
+	// Get cycle
+	var cycle models.AdmissionCycle
+	if err := db.DB.First(&cycle, req.CycleID).Error; err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, "Invalid admission cycle")
+		return
+	}
+
+	// Find existing draft/application
 	var applicant models.Applicant
 	var err error
-	
+
 	if req.ApplicationID != "" {
-		// Application ID based lookup (most secure)
-		err = db.DB.Where("application_id = ? AND status = ? AND admission_cycle_id = ?", 
-			req.ApplicationID, models.ApplicationDraft, req.CycleID).First(&applicant).Error
+		err = db.DB.Where("application_id = ?", req.ApplicationID).
+			First(&applicant).Error
 	} else if req.UserID != "" {
-		// User-based lookup
-		err = db.DB.Where("user_id::text = ? AND status = ? AND admission_cycle_id = ?", 
-			req.UserID, models.ApplicationDraft, req.CycleID).First(&applicant).Error
+		err = db.DB.Where(
+			"user_id::text = ? AND status = ? AND admission_cycle_id = ?",
+			req.UserID,
+			models.ApplicationDraft,
+			req.CycleID,
+		).First(&applicant).Error
 	} else {
-		// Legacy email-based lookup
-		err = db.DB.Where("email = ? AND status = ? AND admission_cycle_id = ?", 
-			req.Email, models.ApplicationDraft, req.CycleID).First(&applicant).Error
+		err = db.DB.Where(
+			"email = ? AND status = ? AND admission_cycle_id = ?",
+			req.Email,
+			models.ApplicationDraft,
+			req.CycleID,
+		).First(&applicant).Error
 	}
-	
+
+	// CREATE NEW
 	if err != nil {
-		// Create new draft
+
 		applicant = models.Applicant{
 			AdmissionCycleID: &req.CycleID,
 			ProgramID:        req.ProgramID,
 			CollegeID:        req.CollegeID,
-			AcademicYearID:   1, // Default, will be updated on submit
+			AcademicYearID:   cycle.AcademicYearID,
 			Status:           models.ApplicationDraft,
 			DraftData:        req.DraftData,
 			DraftSavedAt:     &now,
 		}
-		
-		// Set identifiers
+
 		if req.ApplicationID != "" {
 			applicant.ApplicationID = req.ApplicationID
 		}
-		if req.UserID != "" {
-			uid, parseErr := uuid.Parse(req.UserID)
-			if parseErr == nil {
-				applicant.UserID = &uid
-			}
-		}
+
 		if req.Email != "" {
 			applicant.Email = req.Email
 		}
-		
+
 		if err := db.DB.Create(&applicant).Error; err != nil {
 			utils.ErrorResponse(w, http.StatusInternalServerError, "Failed to save draft")
 			return
 		}
+
 	} else {
-		// Update existing draft
-		applicant.DraftData = req.DraftData
-		applicant.DraftSavedAt = &now
+
+		// UPDATE EXISTING
+		updates := map[string]interface{}{
+			"draft_data":      req.DraftData,
+			"email":		   req.Email,
+			""
+			"draft_saved_at":  now,
+			"academic_year_id": cycle.AcademicYearID,
+		}
+
 		if req.ProgramID > 0 {
-			applicant.ProgramID = req.ProgramID
+			updates["program_id"] = req.ProgramID
 		}
+
 		if req.CollegeID > 0 {
-			applicant.CollegeID = req.CollegeID
+			updates["college_id"] = req.CollegeID
 		}
-		if err := db.DB.Save(&applicant).Error; err != nil {
+
+		if err := db.DB.Model(&applicant).Updates(updates).Error; err != nil {
 			utils.ErrorResponse(w, http.StatusInternalServerError, "Failed to update draft")
 			return
 		}
 	}
-	
+
 	utils.JSONResponse(w, http.StatusOK, true, "Draft saved", map[string]interface{}{
 		"application_id": applicant.ApplicationID,
 		"saved_at":       now,
 	})
 }
+
 
 // ==================== SEAT MATRIX MANAGEMENT (Admin) ====================
 

@@ -18,7 +18,7 @@ func SetupRoutes(r *mux.Router) {
 
 	// ==================== PUBLIC ROUTES ====================
 	api.HandleFunc("/auth/login", handlers.Login).Methods("POST", "OPTIONS")
-	api.HandleFunc("/auth/apply", handlers.PublicSubmitApplication).Methods("POST", "OPTIONS")
+	api.HandleFunc("/applications/public/submit", handlers.PublicSubmitApplication).Methods("POST", "OPTIONS")
 	api.HandleFunc("/auth/application-status", handlers.PublicCheckApplicationStatus).Methods("GET", "OPTIONS")
 	api.HandleFunc("/auth/forgot-password", handlers.ForgotPassword).Methods("POST", "OPTIONS")
 	api.HandleFunc("/auth/reset-password", handlers.ResetPassword).Methods("POST", "OPTIONS")
