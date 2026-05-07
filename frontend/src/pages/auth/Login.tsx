@@ -178,7 +178,7 @@ export default function Login() {
               <p className="text-center text-sm text-gray-500 mt-6">
                 New student?{" "}
                 <Link to="/register" className="text-primary-600 font-medium hover:underline">
-                  Register Here
+                  Apply for Admission
                 </Link>
               </p>
 

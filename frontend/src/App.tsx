@@ -58,7 +58,7 @@ import StudentAttendance from "./pages/student/Attendance";
 import StudentLibrary    from "./pages/student/Library";
 import StudentEvents     from "./pages/student/Events";
 import StudentProfile    from "./pages/student/Profile";
-import ApplicationStatus from "./pages/student/ApplicationStatus";
+
 
 // Applicant Pages (Pre-enrollment)
 import ApplicantDashboard from "./pages/applicant/Dashboard";
@@ -104,8 +104,6 @@ function AppRoutes() {
       
       {/* Public - Application Form (checks sessionStorage for applicant info) */}
       <Route path="/apply" element={<Apply />} />
-      <Route path="/application-status" element={<ApplicationStatus />} />
-      <Route path="/auth/application-status" element={<ApplicationStatus />} />
       <Route path="/applicant/dashboard" element={<ApplicantDashboard />} />
       <Route path="/forgot-password"    element={<ForgotPassword />} />
       <Route path="/reset-password"  element={<ResetPassword />} />

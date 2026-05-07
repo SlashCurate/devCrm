@@ -53,15 +53,18 @@ func Login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get role name from Role table
-	var role models.Role
-	roleName := "student"
-	var collegeID *uint
 
-	if err := db.DB.First(&role, user.RoleID).Error; err == nil {
-		roleName = role.RoleName
-	}
+var role models.Role
+
+if err := db.DB.First(&role, user.RoleID).Error; err != nil {
+    utils.ErrorResponse(w, http.StatusUnauthorized, "Invalid role assigned")
+    return
+}
+
+roleName := role.RoleName
 
 	// Fetch CollegeID based on role for the JWT
+	var collegeID *uint
 	if roleName == models.RoleCollegeAdmin {
 		var ca models.CollegeAdmin
 		if err := db.DB.Where("user_id = ?", user.ID).First(&ca).Error; err == nil {

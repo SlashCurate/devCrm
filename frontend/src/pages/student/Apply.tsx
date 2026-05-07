@@ -3,33 +3,36 @@ import { Link, useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import api from "../../api/axios";
 import toast from "react-hot-toast";
-import type { College, Course, AdmissionCycle } from "../../types";
+import type { College, Course } from "../../types";
 import {
   GraduationCap, Send, CheckCircle,
   User, BookOpen, Layers, FileText, XCircle, Clock,
-  Calendar
+  Calendar, Phone, Mail, Award,
+  AlertCircle, ChevronRight, ChevronLeft,
+  ShieldCheck, FileCheck, ArrowRight, RefreshCw,
+  CreditCard, DollarSign
 } from "lucide-react";
 
 interface ApplyForm {
-  cycle_id:        number;
-  course_id:       number;
-  college_id:      number;
-  first_name:      string;
-  last_name:       string;
-  email:           string;
-  phone:           string;
-  dob:             string;
-  gender:          string;
-  address:         string;
-  city:            string;
-  state:           string;
-  pin_code:        string;
+  cycle_id: number;
+  course_id: number;
+  college_id: number;
+  first_name: string;
+  last_name: string;
+  email: string;
+  phone: string;
+  dob: string;
+  gender: string;
+  address: string;
+  city: string;
+  state: string;
+  pin_code: string;
   previous_school: string;
-  previous_grade:  string;
-  statement:       string;
+  previous_grade: string;
+  statement: string;
+  category: string;
 }
 
-// Applicant info from registration (stored in sessionStorage)
 interface ApplicantInfo {
   application_id: string;
   email: string;
@@ -38,18 +41,47 @@ interface ApplicantInfo {
   last_name: string;
 }
 
+interface AdmissionCycle {
+  id: number;
+  name: string;
+  description: string;
+  application_start_date: string;
+  application_end_date: string;
+  application_fee: number;
+  admission_fee: number;
+  max_applications: number;
+  is_open: boolean;
+  days_until_close: number;
+  status: string;
+  program?: {
+    id: number;
+    name: string;
+    code: string;
+    degree_type: string;
+    duration_years: number;
+  };
+  college?: {
+    id: number;
+    name: string;
+    short_name: string;
+  };
+  academic_year?: {
+    id: number;
+    year_label: string;
+  };
+}
+
 const STEPS = [
-  { label: "Select Admission", icon: Calendar },
-  { label: "Personal Info", icon: User      },
-  { label: "Academic Info", icon: BookOpen  },
-  { label: "Course Select", icon: Layers    },
-  { label: "Review",         icon: FileText  },
+  { label: "Select Admission", icon: Calendar, color: "from-purple-500 to-purple-600" },
+  { label: "Personal Info", icon: User, color: "from-blue-500 to-blue-600" },
+  { label: "Academic Info", icon: BookOpen, color: "from-green-500 to-green-600" },
+  { label: "Course Select", icon: Layers, color: "from-orange-500 to-orange-600" },
+  { label: "Review & Submit", icon: FileCheck, color: "from-primary-600 to-primary-700" },
 ];
 
 export default function Apply() {
   const navigate = useNavigate();
   
-  // Get applicant info from sessionStorage (set during registration)
   const [applicantInfo] = useState<ApplicantInfo>({
     application_id: sessionStorage.getItem("registeredApplicantId") || "",
     email: sessionStorage.getItem("registeredEmail") || "",
@@ -58,28 +90,26 @@ export default function Apply() {
     last_name: sessionStorage.getItem("registeredLastName") || "",
   });
 
-  const [step,           setStep]           = useState(0);
-  const [colleges,       setColleges]       = useState<College[]>([]);
-  const [courses,        setCourses]        = useState<Course[]>([]);
-  const [cycles,         setCycles]         = useState<AdmissionCycle[]>([]);
-  const [selectedCycle,  setSelectedCycle]  = useState<AdmissionCycle | null>(null);
-  const [loading,        setLoading]        = useState(true);
-  const [submitting,     setSubmitting]     = useState(false);
-  const [submitted,      setSubmitted]      = useState(false);
+  const [step, setStep] = useState(0);
+  const [colleges, setColleges] = useState<College[]>([]);
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [cycles, setCycles] = useState<AdmissionCycle[]>([]);
+  const [selectedCycle, setSelectedCycle] = useState<AdmissionCycle | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
   const [admissionsOpen, setAdmissionsOpen] = useState(false);
-  
-  const [draftLoaded,    setDraftLoaded]    = useState(false);
-  const [appId,          setAppId]          = useState<string | null>(null);
-  
-
-  // Status Checker State
+  const [draftLoaded, setDraftLoaded] = useState(false);
+  const [appId, setAppId] = useState<string | null>(null);
+  const [applicationStatus, setApplicationStatus] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<"apply" | "status">("apply");
   const [statusAppId, setStatusAppId] = useState(applicantInfo.application_id);
   const [statusEmail, setStatusEmail] = useState(applicantInfo.email);
   const [statusResult, setStatusResult] = useState<any>(null);
   const [statusError, setStatusError] = useState("");
+  const [savingDraft, setSavingDraft] = useState(false);
 
-  // Redirect to register if no applicant info (not registered yet)
+  // Redirect to register if no applicant info
   useEffect(() => {
     if (!applicantInfo.application_id) {
       toast.error("Please complete registration first");
@@ -87,59 +117,54 @@ export default function Apply() {
     }
   }, [applicantInfo.application_id, navigate]);
 
-const {
-  register,
-  handleSubmit,
-  watch,
-  trigger,
-  setValue,
-  reset,
-  getValues,
-  formState: { errors },
-} = useForm<ApplyForm>();
+  const {
+    register,
+    handleSubmit,
+    watch,
+    trigger,
+    setValue,
+    reset,
+    getValues,
+    formState: { errors },
+  } = useForm<ApplyForm>();
 
-
-
-  const selectedCollege  = watch("college_id");
+  const selectedCollege = watch("college_id");
   const selectedCourseId = watch("course_id");
-  const selectedCycleId  = watch("cycle_id");
-
-const formValues = getValues();
-
-
+  const selectedCycleId = watch("cycle_id");
+  const formValues = getValues();
 
   const filteredCourses = courses.filter(
     (c) => c.college_id === Number(selectedCollege)
   );
-  
-  // Pre-fill applicant info on mount (from registration)
+
+  // Pre-fill applicant info
   useEffect(() => {
     if (applicantInfo.first_name) setValue("first_name", applicantInfo.first_name);
     if (applicantInfo.last_name) setValue("last_name", applicantInfo.last_name);
+    if (applicantInfo.email) setValue("email", applicantInfo.email);
+    if (applicantInfo.phone) setValue("phone", applicantInfo.phone);
   }, []);
 
-  // Load admission cycles with real-world status and check existing application status
+  // Load initial data
   useEffect(() => {
     const loadData = async () => {
       try {
-        // Check if application already submitted
+        // Check existing application status
         if (applicantInfo.application_id) {
           try {
             const statusRes = await api.get(`/auth/application-status?application_id=${applicantInfo.application_id}&email=${applicantInfo.email}`);
             const appStatus = statusRes.data.data?.status;
-            
             if (appStatus && appStatus !== "draft") {
               setSubmitted(true);
               setAppId(applicantInfo.application_id);
+              setApplicationStatus(appStatus);
               toast.success(`Your application is ${appStatus.replace("_", " ")}`);
             }
-          } catch (err) {
-            // Application not found, continue with new application
-          }
+          } catch (err) {}
         }
         
         const [cyclesRes, collegesRes, coursesRes] = await Promise.all([
-          api.get("/admissions/active-cycle"), // Use new endpoint with status
+          api.get("/admissions/active-cycle"),
           api.get("/colleges"),
           api.get("/courses"),
         ]);
@@ -150,12 +175,9 @@ const formValues = getValues();
         setCycles(cyclesData);
         setColleges(collegesRes.data.data || []);
         setCourses(coursesRes.data.data || []);
-        
-        // Check if any admissions are open
         setAdmissionsOpen(hasOpen);
       } catch (err) {
         console.error("Failed to load data:", err);
-        // No active cycle - that's ok, we'll show the closed message
         setAdmissionsOpen(false);
       } finally {
         setLoading(false);
@@ -165,157 +187,130 @@ const formValues = getValues();
     loadData();
   }, [applicantInfo.application_id, applicantInfo.email]);
 
-  // Load draft using application_id
+  // Load draft
   const loadDraft = useCallback(async (cycleId: number) => {
     if (!applicantInfo.application_id || !cycleId || draftLoaded) return;
-    
     try {
       const res = await api.get(`/admissions/draft?application_id=${applicantInfo.application_id}&cycle_id=${cycleId}`);
       if (res.data.data?.has_draft) {
         const draftData = JSON.parse(res.data.data.draft_data);
-        reset(draftData);
+        // Don't override email and phone from registration
+        delete draftData.email;
+        delete draftData.phone;
+        reset({ ...draftData, email: applicantInfo.email, phone: applicantInfo.phone });
         setDraftLoaded(true);
-        toast.success("Draft loaded");
+        toast.success("Previous draft loaded", { duration: 2000 });
       }
-    } catch (err) {
-      // No draft found, that's ok
-    }
-  }, [reset, draftLoaded, applicantInfo.application_id]);
+    } catch (err) {}
+  }, [reset, draftLoaded, applicantInfo.application_id, applicantInfo.email, applicantInfo.phone]);
 
-  // Auto-save functionality (using application_id)
+  // Save draft
+  const saveDraft = useCallback(async () => {
+    if (!selectedCycleId) return;
+    
+    const currentValues = getValues();
+    const requiredFields = ["first_name", "last_name"];
+    const hasRequired = requiredFields.every(field => currentValues[field as keyof ApplyForm]);
+    
+    if (!hasRequired) return;
+    
+    setSavingDraft(true);
+    try {
+      await api.post("/admissions/draft", {
+        application_id: applicantInfo.application_id,
+        email: applicantInfo.email,
+        cycle_id: Number(selectedCycleId),
+        draft_data: JSON.stringify(currentValues),
+        program_id: Number(currentValues.course_id || 0),
+        college_id: Number(currentValues.college_id || 0),
+      });
+      toast.success("Progress saved", { duration: 1500 });
+    } catch (err) {
+      console.error("Auto-save failed:", err);
+    } finally {
+      setSavingDraft(false);
+    }
+  }, [selectedCycleId, getValues, applicantInfo.application_id, applicantInfo.email]);
+
+  // Auto-save on form change (debounced)
+  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (step > 0 && selectedCycleId && draftLoaded) {
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+      saveTimeoutRef.current = setTimeout(() => {
+        saveDraft();
+      }, 3000);
+    }
+    return () => {
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    };
+  }, [formValues, saveDraft, step, selectedCycleId, draftLoaded]);
 
   const stepFields: (keyof ApplyForm)[][] = [
     ["cycle_id"],
-    ["first_name","last_name","dob","gender","address"],
-    ["previous_school","previous_grade","statement"],
-    ["college_id","course_id"],
+    ["first_name", "last_name", "dob", "gender", "address", "city", "state", "pin_code", "category"],
+    ["previous_school", "previous_grade", "statement"],
+    ["college_id", "course_id"],
   ];
 
+  const nextStep = async () => {
+    const valid = await trigger(stepFields[step]);
+    if (!valid) return;
+    
+    await saveDraft();
+    
+    if (step === 0 && selectedCycleId) {
+      const cycle = cycles.find(c => c.id === selectedCycleId);
+      setSelectedCycle(cycle || null);
+    }
+    setStep((s) => s + 1);
+  };
 
-const saveDraftNow = async () => {
+  const onSubmit = async (data: ApplyForm) => {
+    if (!selectedCycle) {
+      toast.error("Please select an admission cycle");
+      return;
+    }
+    if (!applicantInfo.application_id) {
+      toast.error("Please complete registration first");
+      navigate("/register");
+      return;
+    }
 
-  if (!selectedCycleId) return true;
+    setSubmitting(true);
+    try {
+      const payload = {
+        application_id: applicantInfo.application_id,
+        cycle_id: Number(data.cycle_id),
+        program_id: Number(data.course_id),
+        college_id: Number(data.college_id),
+        first_name: data.first_name,
+        last_name: data.last_name,
+        email: applicantInfo.email,
+        phone: applicantInfo.phone,
+        dob: data.dob,
+        gender: data.gender,
+        category: data.category,
+        address: data.address,
+        city: data.city,
+        state: data.state,
+        pin_code: data.pin_code,
+        previous_school: data.previous_school,
+        previous_grade: data.previous_grade,
+        statement: data.statement,
+      };
 
-  try {
-
-    const values = getValues();
-
-    await api.post("/admissions/draft", {
-      application_id: applicantInfo.application_id,
-      cycle_id: Number(selectedCycleId),
-
-      draft_data: JSON.stringify(values),
-
-      program_id: Number(values.course_id || 0),
-      college_id: Number(values.college_id || 0),
-      email: applicantInfo.email,
-      phone: applicantInfo.phone,
-    });
-
-    toast.success("Progress saved");
-
-    return true;
-
-  } catch (err) {
-
-    console.error("SAVE ERROR:", err);
-
-    toast.error("Failed to save progress");
-
-    return false;
-  }
-};
-
-
-
-const nextStep = async () => {
-  const valid = await trigger(stepFields[step]);
-
-  if (!valid) return;
-
-  // save before moving
-  const saved = await saveDraftNow();
-
-  if (!saved) return;
-
-  if (step === 0 && selectedCycleId) {
-    const cycle = cycles.find(c => c.id === selectedCycleId);
-    setSelectedCycle(cycle || null);
-  }
-
-  setStep((s) => s + 1);
-};
-
-const onSubmit = async (data: ApplyForm) => {
-  if (!selectedCycle) {
-    toast.error("Please select an admission cycle");
-    return;
-  }
-
-  if (!applicantInfo.application_id) {
-    toast.error("Please complete registration first");
-    navigate("/register");
-    return;
-  }
-
-  setSubmitting(true);
-
-  try {
-    const payload = {
-      application_id: applicantInfo.application_id,
-
-      cycle_id: Number(data.cycle_id),
-
-      // IMPORTANT
-      program_id: Number(data.course_id),
-
-      college_id: Number(data.college_id),
-
-      // Personal Info
-      first_name: data.first_name,
-      last_name: data.last_name,
-      email: applicantInfo.email,
-      phone: applicantInfo.phone,
-
-      dob: data.dob,
-      gender: data.gender,
-      address: data.address,
-      city: data.city,
-      state: data.state,
-      pin_code: data.pin_code,
-
-      // Academic
-      previous_school: data.previous_school,
-      previous_grade: data.previous_grade,
-      statement: data.statement,
-    };
-
-    console.log("SUBMIT PAYLOAD:", payload);
-
-    const res = await api.post(
-      "/applications/public/submit",
-      payload
-    );
-
-    setSubmitted(true);
-    setAppId(res.data.data.application_id);
-
-    toast.success("Application submitted successfully!");
-
-  } catch (err: any) {
-
-    console.error("SUBMIT ERROR:", err?.response?.data);
-
-    toast.error(
-      err?.response?.data?.error ||
-      err?.response?.data?.message ||
-      "Submission failed"
-    );
-
-  } finally {
-    setSubmitting(false);
-  }
-};
+      const res = await api.post("/applications/public/submit", payload);
+      setSubmitted(true);
+      setAppId(res.data.data.application_id);
+      toast.success("Application submitted successfully!");
+    } catch (err: any) {
+      console.error("SUBMIT ERROR:", err?.response?.data);
+      toast.error(err?.response?.data?.error || err?.response?.data?.message || "Submission failed");
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   const handleCheckStatus = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -324,831 +319,672 @@ const onSubmit = async (data: ApplyForm) => {
     try {
       const res = await api.get(`/auth/application-status?application_id=${statusAppId}&email=${statusEmail}`);
       setStatusResult(res.data.data);
+      toast.success("Status found!");
     } catch (err: any) {
       setStatusError(err.response?.data?.error || "Application not found");
     }
   };
 
-  // ── Loading ────────────────────────────────────────────────────────────────
+  const getStatusBadge = (status: string) => {
+    const statusMap: Record<string, { color: string; icon: React.ReactNode; label: string }> = {
+      draft: { color: "bg-gray-100 text-gray-700", icon: <Clock className="w-4 h-4" />, label: "Draft" },
+      submitted: { color: "bg-blue-100 text-blue-700", icon: <Send className="w-4 h-4" />, label: "Submitted" },
+      payment_pending: { color: "bg-yellow-100 text-yellow-700", icon: <CreditCard className="w-4 h-4" />, label: "Payment Pending" },
+      under_review: { color: "bg-purple-100 text-purple-700", icon: <RefreshCw className="w-4 h-4" />, label: "Under Review" },
+      shortlisted: { color: "bg-green-100 text-green-700", icon: <CheckCircle className="w-4 h-4" />, label: "Shortlisted" },
+      rejected: { color: "bg-red-100 text-red-700", icon: <XCircle className="w-4 h-4" />, label: "Rejected" },
+      enrolled: { color: "bg-emerald-100 text-emerald-700", icon: <Award className="w-4 h-4" />, label: "Enrolled" },
+    };
+    return statusMap[status] || statusMap.draft;
+  };
+
+  const formatDate = (dateString: string) => {
+    if (!dateString) return "N/A";
+    return new Date(dateString).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
+  };
+
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-primary-900
-                      via-primary-800 to-primary-600 flex items-center
-                      justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center">
         <div className="text-center">
-          <div className="w-12 h-12 border-4 border-white border-t-transparent
-                          rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-white text-sm">Loading application form...</p>
+          <RefreshCw className="w-12 h-12 text-primary-600 animate-spin mx-auto mb-4" />
+          <p className="text-gray-600">Loading application form...</p>
         </div>
       </div>
     );
   }
 
-  // ── Admissions Closed / Not Open Yet ─────────────────────────────────────
-  // Allow users with existing application to continue filling the form
-  const hasExistingApplication = !!applicantInfo.application_id;
+  const hasExistingApplication = !!applicantInfo.application_id && applicationStatus === "draft";
   
-  if (!admissionsOpen && !loading && !hasExistingApplication) {
+  if (!admissionsOpen && !loading && !hasExistingApplication && !submitted) {
     const upcomingCycle = cycles.find(c => c.status === "upcoming");
     const isUpcoming = !!upcomingCycle;
     
     return (
-      <div className="min-h-screen bg-gradient-to-br from-primary-900
-                      via-primary-800 to-primary-600 flex items-center
-                      justify-center p-4">
-        <div className="bg-white rounded-2xl shadow-2xl p-10 max-w-md
-                        w-full text-center">
-          <div className={`w-20 h-20 rounded-full flex items-center
-                          justify-center mx-auto mb-6 ${isUpcoming ? 'bg-blue-100' : 'bg-amber-100'}`}>
-            <Clock className={`w-10 h-10 ${isUpcoming ? 'text-blue-600' : 'text-amber-600'}`} />
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center p-4">
+        <div className="max-w-md w-full bg-white rounded-2xl shadow-2xl p-8 text-center">
+          <div className={`w-24 h-24 rounded-2xl flex items-center justify-center mx-auto mb-6 ${isUpcoming ? 'bg-blue-100' : 'bg-amber-100'}`}>
+            <Clock className={`w-12 h-12 ${isUpcoming ? 'text-blue-600' : 'text-amber-600'}`} />
           </div>
           <h2 className="text-2xl font-bold text-gray-900 mb-2">
             {isUpcoming ? "Coming Soon" : "Admissions Closed"}
           </h2>
-          <p className="text-gray-500 mb-4">
+          <p className="text-gray-500 mb-6">
             {isUpcoming 
-              ? `Admissions for ${upcomingCycle?.name} will open on ${new Date(upcomingCycle?.application_start_date).toLocaleDateString()}`
-              : "Currently, no admissions are open. Please check back later or contact the admissions office."
+              ? `Admissions for ${upcomingCycle?.name} will open on ${formatDate(upcomingCycle?.application_start_date)}`
+              : "Currently, no admissions are open. Please check back later."
             }
           </p>
           
-          {isUpcoming && (
-            <div className="bg-blue-50 rounded-xl p-4 mb-6">
-              <p className="text-sm text-blue-800">
-                <strong>Next Session:</strong> {upcomingCycle?.name}<br/>
-                <strong>Opens:</strong> {new Date(upcomingCycle?.application_start_date).toLocaleDateString()}<br/>
-                <strong>Closes:</strong> {new Date(upcomingCycle?.application_end_date).toLocaleDateString()}
-              </p>
+          {isUpcoming && upcomingCycle && (
+            <div className="bg-blue-50 rounded-xl p-4 mb-6 text-left">
+              <p className="text-sm font-semibold text-blue-900 mb-2">📅 Important Dates</p>
+              <p className="text-sm text-blue-800">Opens: {formatDate(upcomingCycle.application_start_date)}</p>
+              <p className="text-sm text-blue-800">Closes: {formatDate(upcomingCycle.application_end_date)}</p>
+              {upcomingCycle.application_fee > 0 && (
+                <p className="text-sm text-blue-800 mt-2">Application Fee: ₹{upcomingCycle.application_fee.toLocaleString()}</p>
+              )}
             </div>
           )}
           
           <div className="flex gap-3">
-            <Link
-              to="/application-status"
-              className="flex-1 py-2.5 bg-gray-100 text-gray-700 font-semibold rounded-xl hover:bg-gray-200 transition-all text-center"
+            <button
+              onClick={() => setViewMode("status")}
+              className="flex-1 py-2.5 bg-gray-100 text-gray-700 font-semibold rounded-xl hover:bg-gray-200 transition-all"
             >
               Track Application
-            </Link>
+            </button>
             <Link
               to="/register"
               className={`flex-1 py-2.5 font-semibold rounded-xl transition-all text-center ${
-                isUpcoming 
-                  ? 'bg-blue-600 text-white hover:bg-blue-700' 
-                  : 'bg-primary-600 text-white hover:bg-primary-700'
+                isUpcoming ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-primary-600 text-white hover:bg-primary-700'
               }`}
             >
-              {isUpcoming ? "Pre-Register" : "Check Updates"}
+              {isUpcoming ? "Pre-Register" : "Go Back"}
             </Link>
           </div>
-          
-          <p className="text-xs text-gray-400 mt-6">
-            📞 Admissions Helpline: 1800-123-4567 | Mon-Sat 10AM-5PM
-          </p>
         </div>
       </div>
     );
   }
 
-  // ── Success Screen ─────────────────────────────────────────────────────────
   if (submitted) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-primary-900
-                      via-primary-800 to-primary-600 flex items-center
-                      justify-center p-4">
-        <div className="bg-white rounded-2xl shadow-2xl p-10 max-w-md
-                        w-full text-center">
-          <div className="w-20 h-20 bg-green-100 rounded-full flex items-center
-                          justify-center mx-auto mb-6">
-            <CheckCircle className="w-10 h-10 text-green-500" />
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center p-4">
+        <div className="max-w-md w-full bg-white rounded-2xl shadow-2xl p-8 text-center">
+          <div className={`w-24 h-24 rounded-2xl flex items-center justify-center mx-auto mb-6 ${
+            applicationStatus === "enrolled" ? "bg-green-100" :
+            applicationStatus === "shortlisted" ? "bg-blue-100" :
+            applicationStatus === "rejected" ? "bg-red-100" : "bg-primary-100"
+          }`}>
+            {applicationStatus === "enrolled" ? <Award className="w-12 h-12 text-green-600" /> :
+             applicationStatus === "shortlisted" ? <CheckCircle className="w-12 h-12 text-blue-600" /> :
+             applicationStatus === "rejected" ? <XCircle className="w-12 h-12 text-red-600" /> :
+             <CheckCircle className="w-12 h-12 text-primary-600" />}
           </div>
+          
           <h2 className="text-2xl font-bold text-gray-900 mb-2">
-            Application Submitted!
+            {applicationStatus === "enrolled" ? "Welcome to S University! 🎓" :
+             applicationStatus === "shortlisted" ? "Congratulations! You're Shortlisted 🎉" :
+             applicationStatus === "rejected" ? "Application Status Update" :
+             "Application Submitted Successfully!"}
           </h2>
-          <p className="text-gray-500 mb-2">
-            Your application has been submitted successfully.
-          </p>
-          <p className="text-sm text-gray-400 mb-4">
-            Application ID: <span className="font-semibold text-primary-600">{appId}</span>
+          
+          <p className="text-gray-500 mb-4">
+            {applicationStatus === "enrolled" ? "You have been successfully enrolled." :
+             applicationStatus === "shortlisted" ? "Please check your email for next steps." :
+             applicationStatus === "rejected" ? "We appreciate your interest." :
+             "Your application has been submitted successfully."}
           </p>
           
-          {(selectedCycle?.application_fee ?? 0) > 0 && (
+          <div className="bg-gradient-to-r from-primary-50 to-primary-100 rounded-xl p-4 mb-6">
+            <p className="text-xs text-gray-600">Application ID</p>
+            <p className="text-xl font-mono font-bold text-primary-700 mt-1">{appId}</p>
+          </div>
+          
+          {(selectedCycle?.application_fee ?? 0) > 0 && applicationStatus !== "enrolled" && (
             <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-6">
+              <div className="flex items-center gap-2 text-amber-700 mb-2">
+                <DollarSign className="w-4 h-4" />
+                <span className="font-semibold">Payment Required</span>
+              </div>
               <p className="text-amber-700 text-sm">
-                <span className="font-semibold">Next Step:</span> Complete payment of ₹{selectedCycle?.application_fee ?? 0} to proceed with your application.
+                Application Fee: ₹{selectedCycle?.application_fee?.toLocaleString()}
               </p>
+              <button className="mt-3 w-full py-2 bg-amber-600 text-white rounded-lg font-semibold hover:bg-amber-700 transition-all">
+                Pay Now
+              </button>
             </div>
           )}
 
           <div className="flex flex-col gap-3">
-            <Link
-              to="/applicant/dashboard"
-              className="btn-primary w-full flex items-center justify-center gap-2"
-            >
-              View My Application →
+            <Link to="/applicant/dashboard" className="btn-primary w-full flex items-center justify-center gap-2">
+              View Dashboard <ArrowRight className="w-4 h-4" />
             </Link>
-            <Link
-              to="/"
-              className="text-primary-600 hover:text-primary-800 text-sm"
-            >
-              Back to Home
-            </Link>
+            <button onClick={() => setViewMode("status")} className="text-primary-600 hover:text-primary-700 text-sm">
+              Track Status
+            </button>
           </div>
         </div>
       </div>
     );
   }
 
-  // ── Main ───────────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary-900
-                    via-primary-800 to-primary-600">
-
-      {/* ── Minimal Public Navbar ── */}
-      <nav className="max-w-3xl mx-auto flex items-center justify-between
-                      px-4 py-4">
-        {/* Brand */}
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-white rounded-xl flex items-center
-                          justify-center shadow-md">
-            <GraduationCap className="w-6 h-6 text-primary-600" />
-          </div>
-          <div>
-            <p className="text-white font-bold text-sm leading-none">
-              University ERP
-            </p>
-            <p className="text-blue-300 text-xs">Admissions Portal</p>
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
+      {/* Header */}
+      <div className="bg-gradient-to-r from-[#650C08] to-[#8B1A14] text-white sticky top-0 z-50 shadow-lg">
+        <div className="max-w-5xl mx-auto px-4 py-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-lg">
+                <GraduationCap className="w-6 h-6 text-[#650C08]" />
+              </div>
+              <div>
+                <p className="font-bold text-sm">S University</p>
+                <p className="text-rose-200 text-xs">Admissions Portal</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              {savingDraft && (
+                <div className="flex items-center gap-1 text-xs text-rose-200">
+                  <RefreshCw className="w-3 h-3 animate-spin" />
+                  <span>Saving...</span>
+                </div>
+              )}
+              <Link to="/login" className="text-sm text-rose-200 hover:text-white transition-colors">
+                Sign In
+              </Link>
+              <button
+                onClick={() => setViewMode(viewMode === "apply" ? "status" : "apply")}
+                className="text-sm font-semibold bg-white/20 hover:bg-white/30 px-4 py-2 rounded-xl transition-all"
+              >
+                {viewMode === "apply" ? "Check Status" : "Apply Now"}
+              </button>
+            </div>
           </div>
         </div>
-
-        <div className="flex items-center">
-          <Link
-            to="/login"
-            className="text-sm text-blue-200 hover:text-white
-                       transition-colors mr-4"
-          >
-            Sign In
-          </Link>
-          <button
-            onClick={() => setViewMode(viewMode === "apply" ? "status" : "apply")}
-            className="text-sm font-semibold text-white bg-primary-700 px-4 py-2 rounded-lg hover:bg-primary-600 transition-colors"
-          >
-            {viewMode === "apply" ? "Check Status" : "Apply Now"}
-          </button>
-        </div>
-      </nav>
-
-      {/* ── Title ── */}
-      <div className="text-center py-6 px-4">
-        <h1 className="text-3xl font-bold text-white">
-          {viewMode === "apply" ? "Student Admission Application" : "Check Application Status"}
-        </h1>
-        <p className="text-blue-200 mt-1 text-sm">
-          {viewMode === "apply" ? "Complete all steps carefully • Takes about 5 minutes" : "Track your application progress"}
-        </p>
       </div>
 
-      {viewMode === "status" && (
-        <div className="max-w-md mx-auto px-4 pb-16">
-          <div className="bg-white rounded-2xl shadow-2xl p-8">
-            <h2 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
-              <FileText className="w-5 h-5 text-primary-600" />
-              Application Tracker
-            </h2>
-            <form onSubmit={handleCheckStatus} className="space-y-4">
-              <div>
-                <label className="form-label">Application ID *</label>
-                <input
-                  type="text"
-                  required
-                  value={statusAppId}
-                  onChange={(e) => setStatusAppId(e.target.value)}
-                  className="input-field"
-                  placeholder="APP-2024-XXXX"
-                />
+      <div className="max-w-4xl mx-auto px-4 py-8">
+        <div className="text-center mb-8">
+          <h1 className="text-3xl font-bold text-gray-900">
+            {viewMode === "apply" ? "🎓 Student Admission Application" : "📋 Check Application Status"}
+          </h1>
+          <p className="text-gray-500 mt-2">
+            {viewMode === "apply" ? "Complete all steps carefully • Auto-saves your progress" : "Track your application progress"}
+          </p>
+        </div>
+
+        {viewMode === "status" && (
+          <div className="bg-white rounded-2xl shadow-xl p-8">
+            <div className="text-center mb-6">
+              <div className="w-20 h-20 bg-gradient-to-br from-blue-100 to-indigo-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                <FileText className="w-10 h-10 text-blue-600" />
               </div>
+              <h2 className="text-2xl font-bold text-gray-900">Track Your Application</h2>
+              <p className="text-gray-500 text-sm mt-1">Enter your credentials to view status</p>
+            </div>
+
+            <form onSubmit={handleCheckStatus} className="space-y-5">
               <div>
-                <label className="form-label">Email Address *</label>
-                <input
-                  type="email"
-                  required
-                  value={statusEmail}
-                  onChange={(e) => setStatusEmail(e.target.value)}
-                  className="input-field"
-                  placeholder="john@example.com"
-                />
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Application ID</label>
+                <div className="relative">
+                  <FileText className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                  <input
+                    type="text"
+                    required
+                    value={statusAppId}
+                    onChange={(e) => setStatusAppId(e.target.value.toUpperCase())}
+                    className="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:border-primary-500 focus:ring-2 focus:ring-primary-200 transition-all"
+                    placeholder="APP-2026-XXXX"
+                  />
+                </div>
               </div>
-              <button type="submit" className="btn-primary w-full">Track Status</button>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Email Address</label>
+                <div className="relative">
+                  <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                  <input
+                    type="email"
+                    required
+                    value={statusEmail}
+                    onChange={(e) => setStatusEmail(e.target.value)}
+                    className="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:border-primary-500 focus:ring-2 focus:ring-primary-200 transition-all"
+                    placeholder="john@example.com"
+                  />
+                </div>
+              </div>
+
+              <button type="submit" className="w-full py-3 bg-gradient-to-r from-primary-600 to-primary-700 hover:from-primary-700 hover:to-primary-800 text-white font-semibold rounded-xl transition-all shadow-lg">
+                Track Status
+              </button>
             </form>
 
             {statusError && (
-              <div className="mt-6 p-4 bg-red-50 text-red-700 rounded-lg text-sm text-center">
+              <div className="mt-6 p-4 bg-red-50 rounded-xl text-red-700 text-sm text-center border border-red-200">
                 {statusError}
               </div>
             )}
 
             {statusResult && (
-              <div className="mt-8 pt-6 border-t">
-                <div className="text-center mb-6">
-                  <div className={`inline-flex items-center justify-center w-16 h-16 rounded-full mb-3 shadow-inner ${
-                    statusResult.Status === "enrolled" ? "bg-green-100 text-green-600" :
-                    statusResult.Status === "rejected" ? "bg-red-100 text-red-600" :
-                    statusResult.Status === "shortlisted" ? "bg-blue-100 text-blue-600" :
-                    "bg-yellow-100 text-yellow-600"
-                  }`}>
-                    {statusResult.Status === "enrolled" ? <CheckCircle className="w-8 h-8" /> :
-                     statusResult.Status === "rejected" ? <XCircle className="w-8 h-8" /> :
-                     <Clock className="w-8 h-8" />}
+              <div className="mt-8 p-6 bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl">
+                <div className="text-center mb-4">
+                  <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold ${getStatusBadge(statusResult.status).color}`}>
+                    {getStatusBadge(statusResult.status).icon}
+                    <span>{getStatusBadge(statusResult.status).label}</span>
                   </div>
-                  <h3 className="text-xl font-bold text-gray-900">
-                    Status: <span className="capitalize">{statusResult.Status.replace("_", " ")}</span>
-                  </h3>
                 </div>
 
-                <div className="space-y-3 text-sm">
-                  <div className="flex justify-between pb-2 border-b">
+                <div className="space-y-3">
+                  <div className="flex justify-between py-2 border-b border-gray-200">
                     <span className="text-gray-500">Applicant</span>
-                    <span className="font-semibold text-gray-900">{statusResult.FirstName} {statusResult.LastName}</span>
+                    <span className="font-semibold">{statusResult.first_name} {statusResult.last_name}</span>
                   </div>
-                  <div className="flex justify-between pb-2 border-b">
+                  <div className="flex justify-between py-2 border-b border-gray-200">
                     <span className="text-gray-500">Program</span>
-                    <span className="font-semibold text-gray-900">{statusResult.Program?.name}</span>
+                    <span className="font-semibold">{statusResult.program?.name}</span>
                   </div>
-                  <div className="flex justify-between pb-2 border-b">
+                  <div className="flex justify-between py-2 border-b border-gray-200">
                     <span className="text-gray-500">College</span>
-                    <span className="font-semibold text-gray-900">{statusResult.College?.name}</span>
+                    <span className="font-semibold">{statusResult.college?.name}</span>
                   </div>
-                  <div className="flex justify-between pb-2 border-b">
+                  <div className="flex justify-between py-2 border-b border-gray-200">
                     <span className="text-gray-500">Applied On</span>
-                    <span className="font-semibold text-gray-900">
-                      {statusResult.SubmittedAt ? new Date(statusResult.SubmittedAt).toLocaleDateString() : "N/A"}
-                    </span>
+                    <span className="font-semibold">{statusResult.submitted_at ? formatDate(statusResult.submitted_at) : "N/A"}</span>
                   </div>
                 </div>
 
-                {statusResult.Remarks && (
-                  <div className="mt-4 p-3 bg-gray-50 rounded-lg text-sm text-gray-700">
-                    <strong>Remarks:</strong> {statusResult.Remarks}
-                  </div>
-                )}
-                {statusResult.RejectionReason && statusResult.Status === "rejected" && (
-                  <div className="mt-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm">
-                    <strong>Reason:</strong> {statusResult.RejectionReason}
+                {statusResult.remarks && (
+                  <div className="mt-4 p-3 bg-white rounded-lg text-sm text-gray-700 border border-gray-200">
+                    <strong>📝 Remarks:</strong> {statusResult.remarks}
                   </div>
                 )}
               </div>
             )}
           </div>
-        </div>
-      )}
+        )}
 
-      {viewMode === "apply" && (
-        <>
-          {/* ── Step Indicator ── */}
-      <div className="max-w-3xl mx-auto px-4 mb-8">
-        <div className="flex items-center justify-between">
-          {STEPS.map(({ label, icon: Icon }, i) => {
-            const isDone   = i < step;
-            const isActive = i === step;
-            return (
-              <Fragment key={i}>
-                <div className="flex flex-col items-center">
-                  <div className={`
-                    w-10 h-10 rounded-full flex items-center justify-center
-                    border-2 font-bold text-sm transition-all duration-300
-                    ${isDone
-                      ? "bg-green-400 border-green-400 text-white"
-                      : isActive
-                      ? "bg-white border-white text-primary-700 scale-110 shadow-lg"
-                      : "bg-transparent border-blue-500 text-blue-400"}
-                  `}>
-                    {isDone
-                      ? <CheckCircle className="w-5 h-5" />
-                      : <Icon className="w-4 h-4" />
-                    }
-                  </div>
-                  <p className={`text-xs mt-1.5 font-medium hidden sm:block
-                    ${isActive ? "text-white" : "text-blue-400"}`}>
-                    {label}
-                  </p>
-                </div>
-                {i < STEPS.length - 1 && (
-                  <div className={`flex-1 h-0.5 mx-2 mb-5 transition-all
-                    ${i < step ? "bg-green-400" : "bg-blue-700"}`}
-                  />
-                )}
-              </Fragment>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* ── Form Card ── */}
-      <div className="max-w-3xl mx-auto px-4 pb-16">
-        <form onSubmit={handleSubmit(onSubmit)}>
-          <div className="bg-white rounded-2xl shadow-2xl p-8">
-
-            {/* ══ STEP 0 — Select Admission Cycle ══ */}
-            {step === 0 && (
-              <div className="space-y-5">
-                <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-                  <Calendar className="w-5 h-5 text-primary-600" />
-                  Select Admission
-                </h2>
-                <p className="text-gray-600 text-sm">
-                  Choose an available admission cycle to begin your application.
-                </p>
-
-                {/* Logged in User Info */}
-                <div className="bg-green-50 border border-green-200 rounded-xl p-4 mb-4">
-                  <div className="flex items-center justify-between mb-1">
-                    <p className="text-green-800 text-sm font-medium">Applicant</p>
-                    <span className="text-xs bg-green-200 text-green-800 px-2 py-0.5 rounded">Verified</span>
-                  </div>
-                  <p className="text-green-900 font-semibold">{applicantInfo.email}</p>
-                  {applicantInfo.phone && (
-                    <p className="text-green-700 text-sm">{applicantInfo.phone}</p>
-                  )}
-                </div>
-
-                <div>
-                  <label className="form-label">Admission Cycle *</label>
-                 <select
-  {...register("cycle_id", { 
-    required: "Please select an admission cycle",
-    valueAsNumber: true   
-  })}
-                    className="input-field"
-                    onChange={(e) => {
-                      const cycleId = Number(e.target.value);
-                      if (cycleId) {
-                        const cycle = cycles.find(c => c.id === cycleId);
-                        setSelectedCycle(cycle || null);
-                        // Load draft using application_id
-                        if (applicantInfo.application_id) {
-                          loadDraft(cycleId);
-                        }
-                      }
-                    }}
-                  >
-                    <option value="">— Select an open admission cycle —</option>
-                    {cycles.filter(c => c.status === "open" || c.status === "upcoming").map((cycle) => (
-                      <option 
-                        key={cycle.id} 
-                        value={cycle.id}
-                        disabled={cycle.status !== "open"}
-                      >
-                        {cycle.name} 
-                        {cycle.status === "open" 
-                          ? `(Open - ${cycle.days_until_close ?? 0} days left)` 
-                          : `(Opens ${new Date(cycle.application_start_date).toLocaleDateString()})`
-                        }
-                        {cycle.application_fee > 0 ? ` - Fee: ₹${cycle.application_fee}` : ''}
-                      </option>
-                    ))}
-                  </select>
-                  {errors.cycle_id && (
-                    <p className="text-red-500 text-xs mt-1">
-                      {errors.cycle_id.message}
-                    </p>
-                  )}
-                  
-                  {/* Status Legend */}
-                  <div className="flex gap-3 mt-2 text-xs">
-                    <span className="flex items-center gap-1">
-                      <span className="w-2 h-2 rounded-full bg-green-500"></span>
-                      Open
-                    </span>
-                    <span className="flex items-center gap-1 text-gray-400">
-                      <span className="w-2 h-2 rounded-full bg-blue-400"></span>
-                      Upcoming
-                    </span>
-                  </div>
-                </div>
-
-                {selectedCycle && (
-                  <div className={`rounded-xl p-4 ${selectedCycle.status === 'open' ? 'bg-green-50 border border-green-200' : 'bg-blue-50 border border-blue-200'}`}>
-                    <div className="flex items-center justify-between mb-2">
-                      <h3 className={`font-semibold ${selectedCycle.status === 'open' ? 'text-green-900' : 'text-blue-900'}`}>
-                        {selectedCycle.name}
-                      </h3>
-                      <span className={`text-xs px-2 py-0.5 rounded ${
-                        selectedCycle.status === 'open' 
-                          ? 'bg-green-200 text-green-800' 
-                          : 'bg-blue-200 text-blue-800'
-                      }`}>
-                        {selectedCycle.status === 'open' ? `Open - ${selectedCycle.days_until_close ?? 0} days left` : 'Upcoming'}
-                      </span>
-                    </div>
-                    <p className={`text-sm mb-2 ${selectedCycle.status === 'open' ? 'text-green-700' : 'text-blue-700'}`}>
-                      {selectedCycle.description}
-                    </p>
-                    <div className="grid grid-cols-2 gap-2 text-sm">
-                      <div>
-                        <span className={selectedCycle.status === 'open' ? 'text-green-600' : 'text-blue-600'}>Application Fee:</span>
-                        <span className="ml-1 font-semibold">₹{selectedCycle.application_fee}</span>
+        {viewMode === "apply" && (
+          <>
+            {/* Step Indicator */}
+            <div className="mb-8">
+              <div className="flex items-center justify-between">
+                {STEPS.map(({ label, icon: Icon, color }, i) => {
+                  const isDone = i < step;
+                  const isActive = i === step;
+                  return (
+                    <Fragment key={i}>
+                      <div className="flex flex-col items-center">
+                        <div className={`
+                          w-12 h-12 rounded-xl flex items-center justify-center transition-all duration-300
+                          ${isDone ? `bg-gradient-to-r ${color} text-white shadow-md` : 
+                            isActive ? `bg-gradient-to-r ${color} text-white shadow-lg scale-110` : 
+                            "bg-gray-100 text-gray-400 border-2 border-gray-200"}
+                        `}>
+                          {isDone ? <CheckCircle className="w-6 h-6" /> : <Icon className="w-6 h-6" />}
+                        </div>
+                        <span className={`text-xs font-semibold mt-2 transition-colors duration-300 hidden sm:block
+                          ${isActive ? "text-primary-600" : "text-gray-500"}`}>
+                          {label}
+                        </span>
                       </div>
-                      <div>
-                        <span className={selectedCycle.status === 'open' ? 'text-green-600' : 'text-blue-600'}>Admission Fee:</span>
-                        <span className="ml-1 font-semibold">₹{selectedCycle.admission_fee}</span>
-                      </div>
-                    </div>
-                    
-                    {selectedCycle.status === 'open' && (selectedCycle.days_until_close ?? 0) <= 7 && (
-                      <div className="mt-3 bg-amber-100 text-amber-800 text-xs p-2 rounded">
-                        Hurry! Only {selectedCycle.days_until_close ?? 0} days left to apply.
-                      </div>
-                    )}
-                  </div>
-                )}
+                      {i < STEPS.length - 1 && (
+                        <div className={`flex-1 h-0.5 mx-2 transition-all duration-300
+                          ${i < step ? "bg-gradient-to-r from-green-500 to-green-600" : "bg-gray-200"}`}
+                        />
+                      )}
+                    </Fragment>
+                  );
+                })}
               </div>
-            )}
-
-            {/* ══ STEP 1 — Personal Info ══ */}
-            {step === 1 && (
-              <div className="space-y-5">
-                <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-                  <User className="w-5 h-5 text-primary-600" />
-                  Personal Information
-                </h2>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="form-label">First Name *</label>
-                    <input
-                      {...register("first_name", { required: "Required" })}
-                      className="input-field" placeholder="John"
-                    />
-                    {errors.first_name && (
-                      <p className="text-red-500 text-xs mt-1">
-                        {errors.first_name.message}
-                      </p>
-                    )}
-                  </div>
-
-                  <div>
-                    <label className="form-label">Last Name *</label>
-                    <input
-                      {...register("last_name", { required: "Required" })}
-                      className="input-field" placeholder="Doe"
-                    />
-                    {errors.last_name && (
-                      <p className="text-red-500 text-xs mt-1">
-                        {errors.last_name.message}
-                      </p>
-                    )}
-                  </div>
-
-                  <div>
-                    <label className="form-label">Date of Birth *</label>
-                    <input
-                      {...register("dob", { required: "Required" })}
-                      type="date" className="input-field"
-                    />
-                    {errors.dob && (
-                      <p className="text-red-500 text-xs mt-1">
-                        {errors.dob.message}
-                      </p>
-                    )}
-                  </div>
-
-                  <div>
-                    <label className="form-label">Gender *</label>
-                    <select
-                      {...register("gender", { required: "Required" })}
-                      className="input-field"
-                    >
-                      <option value="">Select Gender</option>
-                      <option value="Male">Male</option>
-                      <option value="Female">Female</option>
-                      <option value="Other">Other</option>
-                    </select>
-                    {errors.gender && (
-                      <p className="text-red-500 text-xs mt-1">
-                        {errors.gender.message}
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Show email/phone from registration (read-only) */}
-                  <div className="sm:col-span-2 bg-gray-50 rounded-lg p-3">
-                    <p className="text-sm text-gray-600">
-                      <span className="font-medium">Email:</span> {applicantInfo.email}
-                    </p>
-                    {applicantInfo.phone && (
-                      <p className="text-sm text-gray-600 mt-1">
-                        <span className="font-medium">Phone:</span> {applicantInfo.phone}
-                      </p>
-                    )}
-                    <p className="text-xs text-gray-400 mt-2">
-                      Contact info verified during registration. Cannot be changed.
-                    </p>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="form-label">Address *</label>
-                  <input
-                    {...register("address", { required: "Required" })}
-                    className="input-field"
-                    placeholder="123 Main Street"
-                  />
-                  {errors.address && (
-                    <p className="text-red-500 text-xs mt-1">
-                      {errors.address.message}
-                    </p>
-                  )}
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  <div>
-                    <label className="form-label">City</label>
-                    <input
-                      {...register("city")}
-                      className="input-field" placeholder="Mumbai"
-                    />
-                  </div>
-                  <div>
-                    <label className="form-label">State</label>
-                    <input
-                      {...register("state")}
-                      className="input-field" placeholder="Maharashtra"
-                    />
-                  </div>
-                  <div>
-                    <label className="form-label">Pin Code</label>
-                    <input
-                      {...register("pin_code")}
-                      className="input-field" placeholder="400001"
-                    />
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* ══ STEP 2 — Academic Info ══ */}
-            {step === 2 && (
-              <div className="space-y-5">
-                <h2 className="text-xl font-bold text-gray-900 flex
-                               items-center gap-2">
-                  <BookOpen className="w-5 h-5 text-primary-600" />
-                  Academic Information
-                </h2>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="form-label">
-                      Previous School / College *
-                    </label>
-                    <input
-                      {...register("previous_school",
-                        { required: "Required" })}
-                      className="input-field"
-                      placeholder="City High School"
-                    />
-                    {errors.previous_school && (
-                      <p className="text-red-500 text-xs mt-1">
-                        {errors.previous_school.message}
-                      </p>
-                    )}
-                  </div>
-
-                  <div>
-                    <label className="form-label">
-                      Final Grade / Percentage *
-                    </label>
-                    <input
-                      {...register("previous_grade",
-                        { required: "Required" })}
-                      className="input-field" placeholder="85% or A+"
-                    />
-                    {errors.previous_grade && (
-                      <p className="text-red-500 text-xs mt-1">
-                        {errors.previous_grade.message}
-                      </p>
-                    )}
-                  </div>
-                </div>
-
-                <div>
-                  <label className="form-label">Personal Statement *</label>
-                  <textarea
-                    {...register("statement", { required: "Required" })}
-                    className="input-field resize-none"
-                    rows={6}
-                    placeholder="Tell us about yourself, your goals, and why you want to join this program..."
-                  />
-                  {errors.statement && (
-                    <p className="text-red-500 text-xs mt-1">
-                      {errors.statement.message}
-                    </p>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* ══ STEP 3 — Course Selection ══ */}
-            {step === 3 && (
-              <div className="space-y-5">
-                <h2 className="text-xl font-bold text-gray-900 flex
-                               items-center gap-2">
-                  <Layers className="w-5 h-5 text-primary-600" />
-                  Course Selection
-                </h2>
-
-                {/* College Dropdown */}
-                <div>
-                  <label className="form-label">Select College *</label>
-                 <select
-  {...register("college_id", { 
-    required: "Required",
-    valueAsNumber: true
-  })}
-                    className="input-field"
-                  >
-                    <option value="">— Choose a college —</option>
-                    {colleges.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name} ({c.code})
-                      </option>
-                    ))}
-                  </select>
-                  {errors.college_id && (
-                    <p className="text-red-500 text-xs mt-1">
-                      {errors.college_id.message}
-                    </p>
-                  )}
-                </div>
-
-                {/* Course Cards */}
-                {selectedCollege && (
-                  <div>
-                    <label className="form-label">Select Course *</label>
-                    {filteredCourses.length === 0 ? (
-                      <div className="text-center py-8 text-gray-400
-                                      border-2 border-dashed rounded-xl">
-                        No courses available for this college
-                      </div>
-                    ) : (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        {filteredCourses.map((c) => {
-                          const available = c.total_seats;
-                          const isSelected =
-                            Number(selectedCourseId) === c.id;
-                          return (
-                            <label
-                              key={c.id}
-                              className={`flex items-start gap-3 p-4
-                                border-2 rounded-xl cursor-pointer
-                                transition-all duration-200
-                                ${isSelected
-                                  ? "border-primary-500 bg-primary-50 shadow-sm"
-                                  : "border-gray-200 hover:border-primary-300 hover:bg-gray-50"
-                                }`}
-                            >
-                              <input
-  {...register("course_id",
-    { required: "Please select a course", valueAsNumber: true })}
-  type="radio"
-  value={c.id}
-  className="mt-0.5 accent-primary-600"
-/>
-                              <div className="flex-1">
-                                <p className="font-semibold text-gray-900
-                                             text-sm">
-                                  {(c as any).department?.name ? `${(c as any).department.name} - ${c.name}` : c.name}
-                                </p>
-                                <p className="text-xs text-gray-500 mt-0.5">
-                                  {c.code} • {c.duration_years} Years
-                                </p>
-                                <span className={`text-xs font-medium mt-1
-                                  inline-block
-                                  ${available > 10
-                                    ? "text-green-600"
-                                    : available > 0
-                                    ? "text-yellow-600"
-                                    : "text-red-500"
-                                  }`}>
-                                  {available > 0
-                                    ? `${available} seats available`
-                                    : "No seats available"}
-                                </span>
-                              </div>
-                            </label>
-                          );
-                        })}
-                      </div>
-                    )}
-                    {errors.course_id && (
-                      <p className="text-red-500 text-xs mt-2">
-                        Please select a course
-                      </p>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* ══ STEP 4 — Review ══ */}
-            {step === 4 && (
-              <div className="space-y-5">
-                <h2 className="text-xl font-bold text-gray-900 flex
-                               items-center gap-2">
-                  <FileText className="w-5 h-5 text-primary-600" />
-                  Review Your Application
-                </h2>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3
-                               text-sm">
-                  {[
-                    ["Full Name",
-                      `${formValues.first_name} ${formValues.last_name}`],
-                    ["Date of Birth", formValues.dob],
-                    ["Gender",        formValues.gender],
-                    ["Phone",         formValues.phone],
-                    ["Email",         formValues.email],
-                    ["Address",
-                      `${formValues.address}${formValues.city
-                        ? ", " + formValues.city : ""}`],
-                    ["State",         formValues.state],
-                    ["Pin Code",      formValues.pin_code],
-                    ["Prev. School",  formValues.previous_school],
-                    ["Prev. Grade",   formValues.previous_grade],
-                  ].map(([label, value]) => (
-                    <div key={label}
-                      className="bg-gray-50 p-3 rounded-xl">
-                      <p className="text-gray-400 text-xs">{label}</p>
-                      <p className="font-semibold text-gray-900 mt-0.5">
-                        {value || "—"}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-
-                {formValues.statement && (
-                  <div className="bg-gray-50 p-4 rounded-xl">
-                    <p className="text-gray-400 text-xs mb-1">
-                      Personal Statement
-                    </p>
-                    <p className="text-gray-700 text-sm leading-relaxed">
-                      {formValues.statement}
-                    </p>
-                  </div>
-                )}
-
-                <div className="bg-amber-50 border border-amber-200
-                                rounded-xl p-4">
-                  <p className="text-amber-700 text-sm font-medium">
-                    ⚠️ Please review all details carefully before submitting.
-                    Once submitted, changes cannot be made.
-                  </p>
-                </div>
-              </div>
-            )}
-
-            {/* ══ Navigation Buttons ══ */}
-            <div className="flex items-center justify-between mt-8 pt-6
-                            border-t border-gray-100">
-              <button
-                type="button"
-                onClick={() => setStep((s) => s - 1)}
-                disabled={step === 0}
-                className="btn-secondary disabled:opacity-40
-                           disabled:cursor-not-allowed"
-              >
-                ← Previous
-              </button>
-
-              {step < STEPS.length - 1 ? (
-                <button
-                  type="button"
-                  onClick={nextStep}
-                  className="btn-primary"
-                >
-                  Next →
-                </button>
-              ) : (
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="btn-primary flex items-center gap-2
-                             disabled:opacity-70"
-                >
-                  {submitting ? (
-                    <div className="w-4 h-4 border-2 border-white
-                                    border-t-transparent rounded-full
-                                    animate-spin" />
-                  ) : (
-                    <Send className="w-4 h-4" />
-                  )}
-                  {submitting ? "Submitting..." : "Submit Application"}
-                </button>
-              )}
             </div>
-          </div>
-        </form>
+
+            {/* Form Card */}
+            <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
+              <form onSubmit={handleSubmit(onSubmit)}>
+                <div className="p-8">
+                  {/* STEP 0 - Select Admission Cycle */}
+                  {step === 0 && (
+                    <div className="space-y-6">
+                      <div className="flex items-center gap-3 mb-6">
+                        <div className="w-12 h-12 bg-gradient-to-br from-purple-100 to-purple-200 rounded-xl flex items-center justify-center">
+                          <Calendar className="w-6 h-6 text-purple-600" />
+                        </div>
+                        <div>
+                          <h2 className="text-2xl font-bold text-gray-900">Select Admission Cycle</h2>
+                          <p className="text-gray-500 text-sm">Choose the admission cycle you want to apply for</p>
+                        </div>
+                      </div>
+
+                      <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl p-4 border border-green-200">
+                        <div className="flex items-center gap-2 mb-2">
+                          <ShieldCheck className="w-5 h-5 text-green-600" />
+                          <span className="text-sm font-semibold text-green-700">Verified Applicant</span>
+                        </div>
+                        <p className="text-green-800 font-medium">{applicantInfo.first_name} {applicantInfo.last_name}</p>
+                        <div className="flex flex-wrap gap-4 mt-2 text-sm text-green-700">
+                          <span className="flex items-center gap-1"><Mail className="w-3 h-3" /> {applicantInfo.email}</span>
+                          <span className="flex items-center gap-1"><Phone className="w-3 h-3" /> {applicantInfo.phone}</span>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-semibold text-gray-700 mb-2">Select Admission Cycle *</label>
+                        <select
+                          {...register("cycle_id", { required: "Please select an admission cycle", valueAsNumber: true })}
+                          className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-primary-500 focus:ring-2 focus:ring-primary-200 transition-all"
+                          onChange={(e) => {
+                            const cycleId = Number(e.target.value);
+                            if (cycleId) {
+                              const cycle = cycles.find(c => c.id === cycleId);
+                              setSelectedCycle(cycle || null);
+                              if (applicantInfo.application_id) loadDraft(cycleId);
+                            }
+                          }}
+                        >
+                          <option value="">— Select an open admission cycle —</option>
+                          {cycles.filter(c => c.status === "open" || c.status === "upcoming").map((cycle) => (
+                            <option key={cycle.id} value={cycle.id} disabled={cycle.status !== "open"}>
+                              {cycle.name} 
+                              {cycle.status === "open" ? ` (Open - ${cycle.days_until_close} days left)` : ` (Opens ${formatDate(cycle.application_start_date)})`}
+                              {cycle.application_fee > 0 ? ` • Fee: ₹${cycle.application_fee.toLocaleString()}` : ''}
+                            </option>
+                          ))}
+                        </select>
+                        {errors.cycle_id && <p className="text-red-500 text-xs mt-1">{errors.cycle_id.message}</p>}
+                      </div>
+
+                      {selectedCycle && (
+                        <div className={`rounded-xl p-5 ${selectedCycle.status === 'open' ? 'bg-green-50 border border-green-200' : 'bg-blue-50 border border-blue-200'}`}>
+                          <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+                            <h3 className={`font-bold ${selectedCycle.status === 'open' ? 'text-green-900' : 'text-blue-900'}`}>
+                              {selectedCycle.name}
+                            </h3>
+                            <span className={`text-xs px-3 py-1 rounded-full font-semibold ${
+                              selectedCycle.status === 'open' ? 'bg-green-200 text-green-800' : 'bg-blue-200 text-blue-800'
+                            }`}>
+                              {selectedCycle.status === 'open' ? `⏰ ${selectedCycle.days_until_close} days left` : '📅 Upcoming'}
+                            </span>
+                          </div>
+                          <p className="text-sm mb-3">{selectedCycle.description}</p>
+                          <div className="flex flex-wrap gap-4 text-sm">
+                            <div><span className="text-gray-600">Application Fee:</span> <strong>₹{selectedCycle.application_fee?.toLocaleString()}</strong></div>
+                            <div><span className="text-gray-600">Admission Fee:</span> <strong>₹{selectedCycle.admission_fee?.toLocaleString()}</strong></div>
+                          </div>
+                          {selectedCycle.status === 'open' && selectedCycle.days_until_close <= 7 && (
+                            <div className="mt-3 bg-amber-100 text-amber-800 text-xs p-2 rounded-lg flex items-center gap-2">
+                              <AlertCircle className="w-4 h-4" /> Hurry! Only {selectedCycle.days_until_close} days left to apply.
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* STEP 1 - Personal Info */}
+                  {step === 1 && (
+                    <div className="space-y-6">
+                      <div className="flex items-center gap-3 mb-6">
+                        <div className="w-12 h-12 bg-gradient-to-br from-blue-100 to-blue-200 rounded-xl flex items-center justify-center">
+                          <User className="w-6 h-6 text-blue-600" />
+                        </div>
+                        <div>
+                          <h2 className="text-2xl font-bold text-gray-900">Personal Information</h2>
+                          <p className="text-gray-500 text-sm">Tell us about yourself</p>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                        <div>
+                          <label className="block text-sm font-semibold text-gray-700 mb-2">First Name *</label>
+                          <input {...register("first_name", { required: "Required" })} className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-primary-500 focus:ring-2 focus:ring-primary-200 transition-all" placeholder="John" />
+                          {errors.first_name && <p className="text-red-500 text-xs mt-1">{errors.first_name.message}</p>}
+                        </div>
+                        <div>
+                          <label className="block text-sm font-semibold text-gray-700 mb-2">Last Name *</label>
+                          <input {...register("last_name", { required: "Required" })} className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-primary-500 focus:ring-2 focus:ring-primary-200 transition-all" placeholder="Doe" />
+                          {errors.last_name && <p className="text-red-500 text-xs mt-1">{errors.last_name.message}</p>}
+                        </div>
+                        <div>
+                          <label className="block text-sm font-semibold text-gray-700 mb-2">Date of Birth *</label>
+                          <input {...register("dob", { required: "Required" })} type="date" className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-primary-500 focus:ring-2 focus:ring-primary-200 transition-all" />
+                          {errors.dob && <p className="text-red-500 text-xs mt-1">{errors.dob.message}</p>}
+                        </div>
+                        <div>
+                          <label className="block text-sm font-semibold text-gray-700 mb-2">Gender *</label>
+                          <select {...register("gender", { required: "Required" })} className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-primary-500 focus:ring-2 focus:ring-primary-200 transition-all">
+                            <option value="">Select Gender</option>
+                            <option value="Male">Male</option>
+                            <option value="Female">Female</option>
+                            <option value="Other">Other</option>
+                          </select>
+                          {errors.gender && <p className="text-red-500 text-xs mt-1">{errors.gender.message}</p>}
+                        </div>
+                        <div>
+                          <label className="block text-sm font-semibold text-gray-700 mb-2">Category *</label>
+                          <select {...register("category", { required: "Required" })} className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-primary-500 focus:ring-2 focus:ring-primary-200 transition-all">
+                            <option value="">Select Category</option>
+                            <option value="General">General</option>
+                            <option value="OBC">OBC</option>
+                            <option value="SC">SC</option>
+                            <option value="ST">ST</option>
+                            <option value="EWS">EWS</option>
+                          </select>
+                          {errors.category && <p className="text-red-500 text-xs mt-1">{errors.category.message}</p>}
+                        </div>
+                        <div className="md:col-span-2">
+                          <label className="block text-sm font-semibold text-gray-700 mb-2">Address *</label>
+                          <input {...register("address", { required: "Required" })} className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-primary-500 focus:ring-2 focus:ring-primary-200 transition-all" placeholder="123 Main Street" />
+                          {errors.address && <p className="text-red-500 text-xs mt-1">{errors.address.message}</p>}
+                        </div>
+                        <div>
+                          <label className="block text-sm font-semibold text-gray-700 mb-2">City</label>
+                          <input {...register("city")} className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-primary-500 focus:ring-2 focus:ring-primary-200 transition-all" placeholder="Mumbai" />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-semibold text-gray-700 mb-2">State</label>
+                          <input {...register("state")} className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-primary-500 focus:ring-2 focus:ring-primary-200 transition-all" placeholder="Maharashtra" />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-semibold text-gray-700 mb-2">Pin Code</label>
+                          <input {...register("pin_code")} className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-primary-500 focus:ring-2 focus:ring-primary-200 transition-all" placeholder="400001" />
+                        </div>
+                      </div>
+
+                      <div className="bg-gray-50 rounded-xl p-4">
+                        <p className="text-sm text-gray-600 flex items-center gap-2"><Mail className="w-4 h-4" /> Email: <strong>{applicantInfo.email}</strong></p>
+                        {applicantInfo.phone && <p className="text-sm text-gray-600 mt-1 flex items-center gap-2"><Phone className="w-4 h-4" /> Phone: <strong>{applicantInfo.phone}</strong></p>}
+                        <p className="text-xs text-gray-400 mt-2">Contact info verified during registration</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* STEP 2 - Academic Info */}
+                  {step === 2 && (
+                    <div className="space-y-6">
+                      <div className="flex items-center gap-3 mb-6">
+                        <div className="w-12 h-12 bg-gradient-to-br from-green-100 to-green-200 rounded-xl flex items-center justify-center">
+                          <BookOpen className="w-6 h-6 text-green-600" />
+                        </div>
+                        <div>
+                          <h2 className="text-2xl font-bold text-gray-900">Academic Information</h2>
+                          <p className="text-gray-500 text-sm">Share your educational background</p>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 gap-5">
+                        <div>
+                          <label className="block text-sm font-semibold text-gray-700 mb-2">Previous School / College *</label>
+                          <input {...register("previous_school", { required: "Required" })} className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-primary-500 focus:ring-2 focus:ring-primary-200 transition-all" placeholder="City High School" />
+                          {errors.previous_school && <p className="text-red-500 text-xs mt-1">{errors.previous_school.message}</p>}
+                        </div>
+                        <div>
+                          <label className="block text-sm font-semibold text-gray-700 mb-2">Final Grade / Percentage *</label>
+                          <input {...register("previous_grade", { required: "Required" })} className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-primary-500 focus:ring-2 focus:ring-primary-200 transition-all" placeholder="85% or A+" />
+                          {errors.previous_grade && <p className="text-red-500 text-xs mt-1">{errors.previous_grade.message}</p>}
+                        </div>
+                        <div>
+                          <label className="block text-sm font-semibold text-gray-700 mb-2">Personal Statement *</label>
+                          <textarea {...register("statement", { required: "Required" })} rows={6} className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-primary-500 focus:ring-2 focus:ring-primary-200 transition-all resize-none" placeholder="Tell us about yourself, your goals, and why you want to join this program..." />
+                          {errors.statement && <p className="text-red-500 text-xs mt-1">{errors.statement.message}</p>}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* STEP 3 - Course Selection */}
+                  {step === 3 && (
+                    <div className="space-y-6">
+                      <div className="flex items-center gap-3 mb-6">
+                        <div className="w-12 h-12 bg-gradient-to-br from-orange-100 to-orange-200 rounded-xl flex items-center justify-center">
+                          <Layers className="w-6 h-6 text-orange-600" />
+                        </div>
+                        <div>
+                          <h2 className="text-2xl font-bold text-gray-900">Course Selection</h2>
+                          <p className="text-gray-500 text-sm">Choose your preferred college and course</p>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-semibold text-gray-700 mb-2">Select College *</label>
+                        <select {...register("college_id", { required: "Required", valueAsNumber: true })} className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-primary-500 focus:ring-2 focus:ring-primary-200 transition-all">
+                          <option value="">— Choose a college —</option>
+                          {colleges.map((c) => (
+                            <option key={c.id} value={c.id}>{c.name} ({c.code})</option>
+                          ))}
+                        </select>
+                        {errors.college_id && <p className="text-red-500 text-xs mt-1">{errors.college_id.message}</p>}
+                      </div>
+
+                      {selectedCollege && (
+                        <div>
+                          <label className="block text-sm font-semibold text-gray-700 mb-2">Select Course *</label>
+                          {filteredCourses.length === 0 ? (
+                            <div className="text-center py-8 text-gray-400 border-2 border-dashed rounded-xl">No courses available for this college</div>
+                          ) : (
+                            <div className="grid grid-cols-1 gap-3">
+                              {filteredCourses.map((c) => {
+                                const available = c.total_seats;
+                                const isSelected = Number(selectedCourseId) === c.id;
+                                return (
+                                  <label key={c.id} className={`flex items-start gap-4 p-4 border-2 rounded-xl cursor-pointer transition-all duration-200 ${isSelected ? "border-primary-500 bg-primary-50 shadow-sm" : "border-gray-200 hover:border-primary-300 hover:bg-gray-50"}`}>
+                                    <input {...register("course_id", { required: "Please select a course", valueAsNumber: true })} type="radio" value={c.id} className="mt-1 accent-primary-600" />
+                                    <div className="flex-1">
+                                      <p className="font-semibold text-gray-900">{c.name}</p>
+                                      <p className="text-xs text-gray-500 mt-0.5">{c.code} • {c.duration_years} Years</p>
+                                      <span className={`text-xs font-medium mt-1 inline-block ${available > 10 ? "text-green-600" : available > 0 ? "text-yellow-600" : "text-red-500"}`}>
+                                        {available > 0 ? `${available} seats available` : "No seats available"}
+                                      </span>
+                                    </div>
+                                  </label>
+                                );
+                              })}
+                            </div>
+                          )}
+                          {errors.course_id && <p className="text-red-500 text-xs mt-2">{errors.course_id.message}</p>}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* STEP 4 - Review */}
+                  {step === 4 && (
+                    <div className="space-y-6">
+                      <div className="flex items-center gap-3 mb-6">
+                        <div className="w-12 h-12 bg-gradient-to-br from-primary-100 to-primary-200 rounded-xl flex items-center justify-center">
+                          <FileCheck className="w-6 h-6 text-primary-600" />
+                        </div>
+                        <div>
+                          <h2 className="text-2xl font-bold text-gray-900">Review Application</h2>
+                          <p className="text-gray-500 text-sm">Verify all details before submitting</p>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {[
+                          ["Full Name", `${formValues.first_name} ${formValues.last_name}`],
+                          ["Date of Birth", formValues.dob],
+                          ["Gender", formValues.gender],
+                          ["Category", formValues.category],
+                          ["Phone", formValues.phone],
+                          ["Email", formValues.email],
+                          ["Address", `${formValues.address}${formValues.city ? ", " + formValues.city : ""}`],
+                          ["State", formValues.state],
+                          ["Pin Code", formValues.pin_code],
+                          ["Previous School", formValues.previous_school],
+                          ["Previous Grade", formValues.previous_grade],
+                          ["Selected Cycle", selectedCycle?.name || "N/A"],
+                          ["Selected College", colleges.find(c => c.id === Number(formValues.college_id))?.name || "N/A"],
+                          ["Selected Course", courses.find(c => c.id === Number(formValues.course_id))?.name || "N/A"],
+                        ].map(([label, value]) => (
+                          <div key={label} className="bg-gray-50 p-3 rounded-xl">
+                            <p className="text-gray-400 text-xs">{label}</p>
+                            <p className="font-semibold text-gray-900 mt-0.5 break-words">{value || "—"}</p>
+                          </div>
+                        ))}
+                      </div>
+
+                      {formValues.statement && (
+                        <div className="bg-gray-50 p-4 rounded-xl">
+                          <p className="text-gray-400 text-xs mb-1">Personal Statement</p>
+                          <p className="text-gray-700 text-sm leading-relaxed">{formValues.statement}</p>
+                        </div>
+                      )}
+
+                      <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3">
+                        <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                        <div>
+                          <p className="text-amber-700 text-sm font-semibold">Important Notes:</p>
+                          <ul className="text-amber-700 text-xs mt-1 list-disc list-inside">
+                            <li>Please review all details carefully before submitting</li>
+                            <li>Once submitted, changes cannot be made</li>
+                            {(selectedCycle?.application_fee ?? 0) > 0 && (
+                              <li>Application fee of ₹{selectedCycle?.application_fee?.toLocaleString()} is required after submission</li>
+                            )}
+                          </ul>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Navigation Buttons */}
+                  <div className="flex items-center justify-between mt-8 pt-6 border-t border-gray-100">
+                    <button
+                      type="button"
+                      onClick={() => setStep((s) => s - 1)}
+                      disabled={step === 0}
+                      className="px-6 py-2.5 bg-gray-100 text-gray-700 font-semibold rounded-xl hover:bg-gray-200 transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
+                    >
+                      <ChevronLeft className="w-4 h-4" /> Previous
+                    </button>
+
+                    {step < STEPS.length - 1 ? (
+                      <button
+                        type="button"
+                        onClick={nextStep}
+                        className="px-6 py-2.5 bg-gradient-to-r from-primary-600 to-primary-700 text-white font-semibold rounded-xl hover:from-primary-700 hover:to-primary-800 transition-all shadow-md flex items-center gap-2"
+                      >
+                        Next <ChevronRight className="w-4 h-4" />
+                      </button>
+                    ) : (
+                      <button
+                        type="submit"
+                        disabled={submitting}
+                        className="px-6 py-2.5 bg-gradient-to-r from-green-600 to-green-700 text-white font-semibold rounded-xl hover:from-green-700 hover:to-green-800 transition-all shadow-md flex items-center gap-2 disabled:opacity-70"
+                      >
+                        {submitting ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                        {submitting ? "Submitting..." : "Submit Application"}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </form>
+            </div>
+          </>
+        )}
       </div>
-      </>
-      )}
     </div>
   );
 }
