@@ -12,6 +12,8 @@ import (
 	"university-erp-backend/internal/utils"
 
 	"golang.org/x/crypto/bcrypt"
+	"strings"
+	"gorm.io/gorm"
 )
 
 // OTP storage (in production, use Redis)
@@ -347,7 +349,7 @@ func VerifyOTP(w http.ResponseWriter, r *http.Request) {
 	utils.JSONResponse(w, http.StatusOK, true, "OTP verified successfully", nil)
 }
 
-// RegisterApplicant creates applicant record after OTP verification (no password yet)
+// RegisterApplicant creates applicant record after OTP verification (no password yet) Generates Application Id
 func RegisterApplicant(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Email     string `json:"email"`
@@ -355,72 +357,103 @@ func RegisterApplicant(w http.ResponseWriter, r *http.Request) {
 		FirstName string `json:"first_name"`
 		LastName  string `json:"last_name"`
 	}
+
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		utils.ErrorResponse(w, http.StatusBadRequest, "Invalid request body")
 		return
 	}
 
-	// Check if both email and phone OTPs were verified
+	// -----------------------------
+	// OTP Verification (STRICT)
+	// -----------------------------
 	emailKey := "email_" + req.Email
 	phoneKey := "phone_" + req.Phone
 
 	emailEntry, emailExists := otpStore[emailKey]
 	phoneEntry, phoneExists := otpStore[phoneKey]
 
-	// Require both to be verified
-	if (!emailExists || !emailEntry.Verified) && (!phoneExists || !phoneEntry.Verified) {
-		// Fallback: check legacy single verification
-		legacyEntry, legacyExists := otpStore[req.Email]
-		if !legacyExists || !legacyEntry.Verified {
-			utils.ErrorResponse(w, http.StatusUnauthorized, "Both email and phone verification required")
-			return
+	emailVerified := emailExists && emailEntry.Verified
+	phoneVerified := phoneExists && phoneEntry.Verified
+
+	// Legacy fallback (optional backward compatibility)
+	if !emailVerified {
+		if legacy, ok := otpStore[req.Email]; ok {
+			emailVerified = legacy.Verified
 		}
 	}
 
-	// Check if email already exists in users table
-	var existingUser models.User
-	if err := db.DB.Where("email = ?", req.Email).First(&existingUser).Error; err == nil {
+	if !emailVerified || !phoneVerified {
+		utils.ErrorResponse(w, http.StatusUnauthorized, "Both email and phone verification required")
+		return
+	}
+
+	// -----------------------------
+	// Duplicate Checks
+	// -----------------------------
+	var count int64
+
+	db.DB.Model(&models.User{}).Where("email = ?", req.Email).Count(&count)
+	if count > 0 {
 		utils.ErrorResponse(w, http.StatusConflict, "Email already registered")
 		return
 	}
 
-	// Check if email already exists in applicants table
-	var existingApplicant models.Applicant
-	if err := db.DB.Where("email = ?", req.Email).First(&existingApplicant).Error; err == nil {
+	db.DB.Model(&models.Applicant{}).Where("email = ?", req.Email).Count(&count)
+	if count > 0 {
 		utils.ErrorResponse(w, http.StatusConflict, "Email already has an application")
 		return
 	}
 
-	// Check if phone already exists in applicants table
-	if err := db.DB.Where("phone = ?", req.Phone).First(&existingApplicant).Error; err == nil {
+	db.DB.Model(&models.Applicant{}).Where("phone = ?", req.Phone).Count(&count)
+	if count > 0 {
 		utils.ErrorResponse(w, http.StatusConflict, "Phone number already has an application")
 		return
 	}
 
-	// Generate Application Tracking ID (APP-YYYY-XXXX)
+	// -----------------------------
+	// Generate Application ID
+	// -----------------------------
 	year := time.Now().Year()
-	randSuffix := rand.Intn(9000) + 1000
-	appID := fmt.Sprintf("APP-%d-%04d", year, randSuffix)
+	var appID string
+	var result *gorm.DB
 
-	// Create applicant record (not user yet - user created after enrollment)
-	// Use raw SQL to avoid GORM foreign key constraints for optional fields
-	result := db.DB.Exec(`
-		INSERT INTO admissions.applicants 
-		(application_id, email, phone, first_name, last_name, status, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, NOW(), NOW())
-	`, appID, req.Email, req.Phone, req.FirstName, req.LastName, models.ApplicationDraft)
-	
+	const maxRetries = 10
+
+	for i := 0; i < maxRetries; i++ {
+		appID = fmt.Sprintf("APP-%d-%04d", year, rand.Intn(9000)+1000)//kira
+
+		result = db.DB.Exec(`
+			INSERT INTO admissions.applicants
+			(application_id, email, phone, first_name, last_name, status, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, NOW(), NOW())
+		`, appID, req.Email, req.Phone, req.FirstName, req.LastName, models.ApplicationDraft)
+
+		if result.Error == nil {
+			break
+		}
+
+		// Retry only for duplicate key error
+		if !strings.Contains(result.Error.Error(), "duplicate key") {
+			utils.ErrorResponse(w, http.StatusInternalServerError, "Database error: "+result.Error.Error())
+			return
+		}
+	}
+
 	if result.Error != nil {
-		fmt.Printf("DEBUG: Failed to create applicant: %v\n", result.Error)
-		utils.ErrorResponse(w, http.StatusInternalServerError, "Failed to create applicant: "+result.Error.Error())
+		utils.ErrorResponse(w, http.StatusInternalServerError, "Failed to generate unique application ID Applcaitons have been fully genertaed with ids")
 		return
 	}
 
-	// Clean up OTPs
+	// -----------------------------
+	// Cleanup OTPs
+	// -----------------------------
 	delete(otpStore, emailKey)
 	delete(otpStore, phoneKey)
 	delete(otpStore, req.Email)
 
+	// -----------------------------
+	// Response
+	// -----------------------------
 	utils.JSONResponse(w, http.StatusCreated, true, "Applicant registered successfully", map[string]interface{}{
 		"applicant_id": appID,
 		"email":        req.Email,

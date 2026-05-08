@@ -10,7 +10,7 @@ import {
   Calendar, Phone, Mail, Award,
   AlertCircle, ChevronRight, ChevronLeft,
   ShieldCheck, FileCheck, ArrowRight, RefreshCw,
-  CreditCard, DollarSign
+  CreditCard, IndianRupee
 } from "lucide-react";
 
 interface ApplyForm {
@@ -81,7 +81,7 @@ const STEPS = [
 
 export default function Apply() {
   const navigate = useNavigate();
-  
+
   const [applicantInfo] = useState<ApplicantInfo>({
     application_id: sessionStorage.getItem("registeredApplicantId") || "",
     email: sessionStorage.getItem("registeredEmail") || "",
@@ -160,18 +160,18 @@ export default function Apply() {
               setApplicationStatus(appStatus);
               toast.success(`Your application is ${appStatus.replace("_", " ")}`);
             }
-          } catch (err) {}
+          } catch (err) { }
         }
-        
+
         const [cyclesRes, collegesRes, coursesRes] = await Promise.all([
           api.get("/admissions/active-cycle"),
           api.get("/colleges"),
           api.get("/courses"),
         ]);
-        
+
         const cyclesData = cyclesRes.data.data?.cycles || [];
         const hasOpen = cyclesRes.data.data?.has_open || false;
-        
+
         setCycles(cyclesData);
         setColleges(collegesRes.data.data || []);
         setCourses(coursesRes.data.data || []);
@@ -183,7 +183,7 @@ export default function Apply() {
         setLoading(false);
       }
     };
-    
+
     loadData();
   }, [applicantInfo.application_id, applicantInfo.email]);
 
@@ -201,19 +201,19 @@ export default function Apply() {
         setDraftLoaded(true);
         toast.success("Previous draft loaded", { duration: 2000 });
       }
-    } catch (err) {}
+    } catch (err) { }
   }, [reset, draftLoaded, applicantInfo.application_id, applicantInfo.email, applicantInfo.phone]);
 
   // Save draft
   const saveDraft = useCallback(async () => {
     if (!selectedCycleId) return;
-    
+
     const currentValues = getValues();
     const requiredFields = ["first_name", "last_name"];
     const hasRequired = requiredFields.every(field => currentValues[field as keyof ApplyForm]);
-    
+
     if (!hasRequired) return;
-    
+
     setSavingDraft(true);
     try {
       await api.post("/admissions/draft", {
@@ -256,9 +256,9 @@ export default function Apply() {
   const nextStep = async () => {
     const valid = await trigger(stepFields[step]);
     if (!valid) return;
-    
+
     await saveDraft();
-    
+
     if (step === 0 && selectedCycleId) {
       const cycle = cycles.find(c => c.id === selectedCycleId);
       setSelectedCycle(cycle || null);
@@ -355,11 +355,11 @@ export default function Apply() {
   }
 
   const hasExistingApplication = !!applicantInfo.application_id && applicationStatus === "draft";
-  
+
   if (!admissionsOpen && !loading && !hasExistingApplication && !submitted) {
     const upcomingCycle = cycles.find(c => c.status === "upcoming");
     const isUpcoming = !!upcomingCycle;
-    
+
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center p-4">
         <div className="max-w-md w-full bg-white rounded-2xl shadow-2xl p-8 text-center">
@@ -370,12 +370,12 @@ export default function Apply() {
             {isUpcoming ? "Coming Soon" : "Admissions Closed"}
           </h2>
           <p className="text-gray-500 mb-6">
-            {isUpcoming 
+            {isUpcoming
               ? `Admissions for ${upcomingCycle?.name} will open on ${formatDate(upcomingCycle?.application_start_date)}`
               : "Currently, no admissions are open. Please check back later."
             }
           </p>
-          
+
           {isUpcoming && upcomingCycle && (
             <div className="bg-blue-50 rounded-xl p-4 mb-6 text-left">
               <p className="text-sm font-semibold text-blue-900 mb-2">📅 Important Dates</p>
@@ -386,7 +386,7 @@ export default function Apply() {
               )}
             </div>
           )}
-          
+
           <div className="flex gap-3">
             <button
               onClick={() => setViewMode("status")}
@@ -396,9 +396,8 @@ export default function Apply() {
             </button>
             <Link
               to="/register"
-              className={`flex-1 py-2.5 font-semibold rounded-xl transition-all text-center ${
-                isUpcoming ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-primary-600 text-white hover:bg-primary-700'
-              }`}
+              className={`flex-1 py-2.5 font-semibold rounded-xl transition-all text-center ${isUpcoming ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-primary-600 text-white hover:bg-primary-700'
+                }`}
             >
               {isUpcoming ? "Pre-Register" : "Go Back"}
             </Link>
@@ -412,40 +411,39 @@ export default function Apply() {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center p-4">
         <div className="max-w-md w-full bg-white rounded-2xl shadow-2xl p-8 text-center">
-          <div className={`w-24 h-24 rounded-2xl flex items-center justify-center mx-auto mb-6 ${
-            applicationStatus === "enrolled" ? "bg-green-100" :
+          <div className={`w-24 h-24 rounded-2xl flex items-center justify-center mx-auto mb-6 ${applicationStatus === "enrolled" ? "bg-green-100" :
             applicationStatus === "shortlisted" ? "bg-blue-100" :
-            applicationStatus === "rejected" ? "bg-red-100" : "bg-primary-100"
-          }`}>
+              applicationStatus === "rejected" ? "bg-red-100" : "bg-primary-100"
+            }`}>
             {applicationStatus === "enrolled" ? <Award className="w-12 h-12 text-green-600" /> :
-             applicationStatus === "shortlisted" ? <CheckCircle className="w-12 h-12 text-blue-600" /> :
-             applicationStatus === "rejected" ? <XCircle className="w-12 h-12 text-red-600" /> :
-             <CheckCircle className="w-12 h-12 text-primary-600" />}
+              applicationStatus === "shortlisted" ? <CheckCircle className="w-12 h-12 text-blue-600" /> :
+                applicationStatus === "rejected" ? <XCircle className="w-12 h-12 text-red-600" /> :
+                  <CheckCircle className="w-12 h-12 text-primary-600" />}
           </div>
-          
+
           <h2 className="text-2xl font-bold text-gray-900 mb-2">
             {applicationStatus === "enrolled" ? "Welcome to S University! 🎓" :
-             applicationStatus === "shortlisted" ? "Congratulations! You're Shortlisted 🎉" :
-             applicationStatus === "rejected" ? "Application Status Update" :
-             "Application Submitted Successfully!"}
+              applicationStatus === "shortlisted" ? "Congratulations! You're Shortlisted 🎉" :
+                applicationStatus === "rejected" ? "Application Status Update" :
+                  "Application Submitted Successfully!"}
           </h2>
-          
+
           <p className="text-gray-500 mb-4">
             {applicationStatus === "enrolled" ? "You have been successfully enrolled." :
-             applicationStatus === "shortlisted" ? "Please check your email for next steps." :
-             applicationStatus === "rejected" ? "We appreciate your interest." :
-             "Your application has been submitted successfully."}
+              applicationStatus === "shortlisted" ? "Please check your email for next steps." :
+                applicationStatus === "rejected" ? "We appreciate your interest." :
+                  "Your application has been submitted successfully."}
           </p>
-          
+
           <div className="bg-gradient-to-r from-primary-50 to-primary-100 rounded-xl p-4 mb-6">
             <p className="text-xs text-gray-600">Application ID</p>
             <p className="text-xl font-mono font-bold text-primary-700 mt-1">{appId}</p>
           </div>
-          
+
           {(selectedCycle?.application_fee ?? 0) > 0 && applicationStatus !== "enrolled" && (
             <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-6">
               <div className="flex items-center gap-2 text-amber-700 mb-2">
-                <DollarSign className="w-4 h-4" />
+                <IndianRupee className="w-4 h-4" />
                 <span className="font-semibold">Payment Required</span>
               </div>
               <p className="text-amber-700 text-sm">
@@ -619,9 +617,9 @@ export default function Apply() {
                       <div className="flex flex-col items-center">
                         <div className={`
                           w-12 h-12 rounded-xl flex items-center justify-center transition-all duration-300
-                          ${isDone ? `bg-gradient-to-r ${color} text-white shadow-md` : 
-                            isActive ? `bg-gradient-to-r ${color} text-white shadow-lg scale-110` : 
-                            "bg-gray-100 text-gray-400 border-2 border-gray-200"}
+                          ${isDone ? `bg-gradient-to-r ${color} text-white shadow-md` :
+                            isActive ? `bg-gradient-to-r ${color} text-white shadow-lg scale-110` :
+                              "bg-gray-100 text-gray-400 border-2 border-gray-200"}
                         `}>
                           {isDone ? <CheckCircle className="w-6 h-6" /> : <Icon className="w-6 h-6" />}
                         </div>
@@ -687,7 +685,7 @@ export default function Apply() {
                           <option value="">— Select an open admission cycle —</option>
                           {cycles.filter(c => c.status === "open" || c.status === "upcoming").map((cycle) => (
                             <option key={cycle.id} value={cycle.id} disabled={cycle.status !== "open"}>
-                              {cycle.name} 
+                              {cycle.name}
                               {cycle.status === "open" ? ` (Open - ${cycle.days_until_close} days left)` : ` (Opens ${formatDate(cycle.application_start_date)})`}
                               {cycle.application_fee > 0 ? ` • Fee: ₹${cycle.application_fee.toLocaleString()}` : ''}
                             </option>
@@ -702,9 +700,8 @@ export default function Apply() {
                             <h3 className={`font-bold ${selectedCycle.status === 'open' ? 'text-green-900' : 'text-blue-900'}`}>
                               {selectedCycle.name}
                             </h3>
-                            <span className={`text-xs px-3 py-1 rounded-full font-semibold ${
-                              selectedCycle.status === 'open' ? 'bg-green-200 text-green-800' : 'bg-blue-200 text-blue-800'
-                            }`}>
+                            <span className={`text-xs px-3 py-1 rounded-full font-semibold ${selectedCycle.status === 'open' ? 'bg-green-200 text-green-800' : 'bg-blue-200 text-blue-800'
+                              }`}>
                               {selectedCycle.status === 'open' ? `⏰ ${selectedCycle.days_until_close} days left` : '📅 Upcoming'}
                             </span>
                           </div>
@@ -749,7 +746,12 @@ export default function Apply() {
                         </div>
                         <div>
                           <label className="block text-sm font-semibold text-gray-700 mb-2">Date of Birth *</label>
-                          <input {...register("dob", { required: "Required" })} type="date" className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-primary-500 focus:ring-2 focus:ring-primary-200 transition-all" />
+                          <input
+                            {...register("dob", { required: "Required" })}
+                            type="date"
+                            max={new Date().toISOString().split("T")[0]}
+                            className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-primary-500 focus:ring-2 focus:ring-primary-200 transition-all"
+                          />
                           {errors.dob && <p className="text-red-500 text-xs mt-1">{errors.dob.message}</p>}
                         </div>
                         <div>
@@ -785,11 +787,68 @@ export default function Apply() {
                         </div>
                         <div>
                           <label className="block text-sm font-semibold text-gray-700 mb-2">State</label>
-                          <input {...register("state")} className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-primary-500 focus:ring-2 focus:ring-primary-200 transition-all" placeholder="Maharashtra" />
+                          <select
+                            {...register("state", { required: "State is required" })}
+                            className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-primary-500 focus:ring-2 focus:ring-primary-200 transition-all"
+                          >
+                            <option value="">Select State</option>
+
+                            <option value="Andhra Pradesh">Andhra Pradesh</option>
+                            <option value="Arunachal Pradesh">Arunachal Pradesh</option>
+                            <option value="Assam">Assam</option>
+                            <option value="Bihar">Bihar</option>
+                            <option value="Chhattisgarh">Chhattisgarh</option>
+                            <option value="Goa">Goa</option>
+                            <option value="Gujarat">Gujarat</option>
+                            <option value="Haryana">Haryana</option>
+                            <option value="Himachal Pradesh">Himachal Pradesh</option>
+                            <option value="Jharkhand">Jharkhand</option>
+                            <option value="Karnataka">Karnataka</option>
+                            <option value="Kerala">Kerala</option>
+                            <option value="Madhya Pradesh">Madhya Pradesh</option>
+                            <option value="Maharashtra">Maharashtra</option>
+                            <option value="Manipur">Manipur</option>
+                            <option value="Meghalaya">Meghalaya</option>
+                            <option value="Mizoram">Mizoram</option>
+                            <option value="Nagaland">Nagaland</option>
+                            <option value="Odisha">Odisha</option>
+                            <option value="Punjab">Punjab</option>
+                            <option value="Rajasthan">Rajasthan</option>
+                            <option value="Sikkim">Sikkim</option>
+                            <option value="Tamil Nadu">Tamil Nadu</option>
+                            <option value="Telangana">Telangana</option>
+                            <option value="Tripura">Tripura</option>
+                            <option value="Uttar Pradesh">Uttar Pradesh</option>
+                            <option value="Uttarakhand">Uttarakhand</option>
+                            <option value="West Bengal">West Bengal</option>
+
+                            <option value="Delhi">Delhi</option>
+                            <option value="Jammu and Kashmir">Jammu and Kashmir</option>
+                            <option value="Ladakh">Ladakh</option>
+
+                            <option value="Other">Other</option>
+                          </select>
                         </div>
                         <div>
                           <label className="block text-sm font-semibold text-gray-700 mb-2">Pin Code</label>
-                          <input {...register("pin_code")} className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-primary-500 focus:ring-2 focus:ring-primary-200 transition-all" placeholder="400001" />
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            maxLength={6}
+                            {...register("pin_code", {
+                              required: "Required",
+                              pattern: {
+                                value: /^[0-9]{6}$/,
+                                message: "Must be 6 digits",
+                              },
+                            })}
+                            onInput={(e) =>
+                            (e.currentTarget.value = e.currentTarget.value
+                              .replace(/\D/g, "")
+                              .slice(0, 6))
+                            }
+                            className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl"
+                          />
                         </div>
                       </div>
 

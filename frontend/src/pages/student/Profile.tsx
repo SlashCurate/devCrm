@@ -203,7 +203,7 @@ export default function StudentProfile() {
                 >
                   <option value="first_name">First Name</option>
                   <option value="last_name">Last Name</option>
-                  <option value="dob">Date of Birth</option>
+                  {/* <option value="dob">Date of Birth</option>//not using this for now */}
                   <option value="gender">Gender</option>
                   <option value="category">Category</option>
                 </select>

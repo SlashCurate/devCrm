@@ -615,7 +615,10 @@ export default function Register() {
                           type="text"
                           required
                           value={data.firstName}
-                          onChange={(e) => setData({ ...data, firstName: e.target.value })}
+                          onChange={(e) => {
+                            const value = e.target.value.replace(/[^a-zA-Z]/g, "");
+                            setData({ ...data, firstName: value });
+                          }}
                           className="w-full px-4 py-2.5 border-2 border-gray-200 rounded-xl focus:border-primary-500 focus:ring-2 focus:ring-primary-200 transition-all"
                           placeholder="John"
                         />
@@ -626,7 +629,10 @@ export default function Register() {
                           type="text"
                           required
                           value={data.lastName}
-                          onChange={(e) => setData({ ...data, lastName: e.target.value })}
+                          onChange={(e) => {
+                            const value = e.target.value.replace(/[^a-zA-Z]/g, "");
+                            setData({ ...data, lastName: value });
+                          }}
                           className="w-full px-4 py-2.5 border-2 border-gray-200 rounded-xl focus:border-primary-500 focus:ring-2 focus:ring-primary-200 transition-all"
                           placeholder="Doe"
                         />
@@ -641,7 +647,13 @@ export default function Register() {
                           type="email"
                           required
                           value={data.email}
-                          onChange={(e) => setData({ ...data, email: e.target.value })}
+                          onChange={(e) => {
+                            const value = e.target.value
+                              .toLowerCase()
+                              .replace(/\s/g, ""); // remove spaces
+
+                            setData({ ...data, email: value });
+                          }}
                           className="w-full pl-12 pr-4 py-2.5 border-2 border-gray-200 rounded-xl focus:border-primary-500 focus:ring-2 focus:ring-primary-200 transition-all"
                           placeholder="john@example.com"
                         />
