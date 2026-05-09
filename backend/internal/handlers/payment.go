@@ -286,7 +286,214 @@ func GetPendingFees(w http.ResponseWriter, r *http.Request) {
 
 	utils.JSONResponse(w, http.StatusOK, true, "Pending fees fetched", pending)
 }
+// ==================== APPLICANT APPLICATION FEE PAYMENT ====================
+// ==================== INITIATE APPLICANT APPLICATION FEE ====================
+func InitiateApplicantApplicationFee(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		ApplicationID string `json:"application_id"`
+	}
 
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	// Validate Application ID
+	if req.ApplicationID == "" {
+		utils.ErrorResponse(w, http.StatusBadRequest, "Application ID is required")
+		return
+	}
+
+	// ==================== FETCH APPLICANT ====================
+	var applicant models.Applicant
+	if err := db.DB.Where("application_id = ?", req.ApplicationID).
+		Preload("AdmissionCycle").
+		First(&applicant).Error; err != nil {
+		fmt.Printf("❌ Applicant not found: %s\n", req.ApplicationID)
+		utils.ErrorResponse(w, http.StatusNotFound, "Application not found")
+		return
+	}
+
+	// Validate Fee
+	if applicant.ApplicationFee <= 0 {
+		utils.JSONResponse(w, http.StatusBadRequest, false, "No application fee required for this applicant", nil)
+		return
+	}
+
+	if applicant.ApplicationFeePaid {
+		utils.JSONResponse(w, http.StatusBadRequest, false, "Application fee already paid", nil)
+		return
+	}
+
+	// ==================== GET RAZORPAY CREDENTIALS ====================
+	razorpayKeyID := os.Getenv("RAZORPAY_KEY_ID")
+	razorpayKeySecret := os.Getenv("RAZORPAY_KEY_SECRET")
+
+	if razorpayKeyID == "" || razorpayKeySecret == "" {
+		utils.ErrorResponse(w, http.StatusInternalServerError, "Payment gateway not configured")
+		return
+	}
+
+	// ==================== CREATE RAZORPAY ORDER ====================
+	client := razorpay.NewClient(razorpayKeyID, razorpayKeySecret)
+	if client == nil {
+		utils.ErrorResponse(w, http.StatusInternalServerError, "Payment gateway initialization failed")
+		return
+	}
+
+	receipt := "APP-" + utils.GenerateReceiptNumber()
+	amountInPaise := int64(applicant.ApplicationFee * 100)
+
+	orderData := map[string]interface{}{
+		"amount":   amountInPaise,
+		"currency": "INR",
+		"receipt":  receipt,
+		"notes": map[string]interface{}{
+			"application_id": applicant.ApplicationID,
+			"purpose":        "application_fee",
+			"applicant_name": applicant.FirstName + " " + applicant.LastName,
+			"applicant_email": applicant.Email,
+			"phone":           applicant.Phone,
+		},
+	}
+
+	order, err := client.Order.Create(orderData, nil)
+	if err != nil {
+		fmt.Printf("❌ Razorpay Error: %v\n", err)
+		utils.ErrorResponse(w, http.StatusInternalServerError, "Failed to create payment order")
+		return
+	}
+
+	orderID, ok := order["id"].(string)
+	if !ok || orderID == "" {
+		utils.ErrorResponse(w, http.StatusInternalServerError, "Invalid payment response")
+		return
+	}
+
+	// ==================== UPDATE APPLICANT STATUS ====================
+	db.DB.Model(&applicant).
+		Update("application_fee_payment_id", orderID).
+		Update("status", "payment_pending")
+
+	fmt.Printf("✅ Payment Order Created: %s | Application: %s\n", orderID, applicant.ApplicationID)
+
+	// ==================== RETURN RESPONSE ====================
+	utils.JSONResponse(w, http.StatusOK, true, "Payment order created successfully", map[string]interface{}{
+		"order_id":            orderID,
+		"amount":              amountInPaise,
+		"amount_in_rupees":    applicant.ApplicationFee,
+		"currency":            "INR",
+		"key_id":              razorpayKeyID,
+		"applicant_name":      applicant.FirstName + " " + applicant.LastName,
+		"applicant_email":     applicant.Email,
+		"receipt_number":      receipt,
+	})
+}
+
+// ==================== VERIFY APPLICANT APPLICATION FEE ====================
+func VerifyApplicantApplicationFee(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		ApplicationID     string `json:"application_id"`
+		RazorpayOrderID   string `json:"razorpay_order_id"`
+		RazorpayPaymentID string `json:"razorpay_payment_id"`
+		RazorpaySignature string `json:"razorpay_signature"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	// Validate required fields
+	if req.ApplicationID == "" || req.RazorpayOrderID == "" || 
+	   req.RazorpayPaymentID == "" || req.RazorpaySignature == "" {
+		utils.ErrorResponse(w, http.StatusBadRequest, "Missing required payment fields")
+		return
+	}
+
+	fmt.Printf("🔍 Verifying: Order=%s | Payment=%s\n", req.RazorpayOrderID, req.RazorpayPaymentID)
+
+	// ==================== VERIFY SIGNATURE ====================
+	razorpayKeySecret := os.Getenv("RAZORPAY_KEY_SECRET")
+	signatureData := req.RazorpayOrderID + "|" + req.RazorpayPaymentID
+	
+	mac := hmac.New(sha256.New, []byte(razorpayKeySecret))
+	mac.Write([]byte(signatureData))
+	expectedSignature := hex.EncodeToString(mac.Sum(nil))
+
+	if expectedSignature != req.RazorpaySignature {
+		fmt.Printf("❌ Signature Verification Failed\n")
+		utils.ErrorResponse(w, http.StatusBadRequest, "Payment signature verification failed")
+		return
+	}
+
+	fmt.Printf("✅ Signature Verified\n")
+
+	// ==================== FETCH APPLICANT ====================
+	var applicant models.Applicant
+	if err := db.DB.Where("application_id = ?", req.ApplicationID).First(&applicant).Error; err != nil {
+		utils.ErrorResponse(w, http.StatusNotFound, "Application not found")
+		return
+	}
+
+	// Check if already paid
+	if applicant.ApplicationFeePaid {
+		utils.JSONResponse(w, http.StatusBadRequest, false, "Application fee already paid", nil)
+		return
+	}
+
+	// ==================== UPDATE APPLICANT ====================
+	now := time.Now()
+	if err := db.DB.Model(&applicant).Updates(map[string]interface{}{
+		"application_fee_paid":       true,
+		"application_fee_payment_id": req.RazorpayPaymentID,
+		"payment_completed_at":       &now,
+	}).Error; err != nil {
+		fmt.Printf("❌ Failed to update applicant: %v\n", err)
+		utils.ErrorResponse(w, http.StatusInternalServerError, "Failed to update application")
+		return
+	}
+
+	fmt.Printf("✅ Applicant Updated\n")
+
+	// ==================== CREATE APPLICANT PAYMENT RECORD ====================
+	applicantPayment := models.ApplicantPayment{
+		ApplicationID:     req.ApplicationID,
+		AmountPaid:        applicant.ApplicationFee,
+		Currency:          "INR",
+		PaymentMode:       "Online",
+		TransactionID:     req.RazorpayPaymentID,
+		Gateway:           "Razorpay",
+		ReceiptNumber:     "APP-" + req.RazorpayPaymentID[:8],
+		RazorpayOrderID:   req.RazorpayOrderID,
+		RazorpayPaymentID: req.RazorpayPaymentID,
+		RazorpaySignature: req.RazorpaySignature,
+		Status:            "success",
+		IsVerified:        true,
+		PaymentDate:       now,
+		PaidAt:            &now,
+		PaymentFor:        "application_fee",
+	}
+
+	if err := db.DB.Create(&applicantPayment).Error; err != nil {
+		fmt.Printf("⚠️ Failed to create applicant payment record: %v (Non-critical)\n", err)
+		// Non-blocking error - applicant already updated
+	} else {
+		fmt.Printf("✅ Applicant Payment Record Created: ID=%d\n", applicantPayment.ID)
+	}
+
+	// ==================== RETURN RESPONSE ====================
+	fmt.Printf("✅ Payment Verification Complete for: %s\n", req.ApplicationID)
+
+	utils.JSONResponse(w, http.StatusOK, true, "Payment verified successfully", map[string]interface{}{
+		"application_id": req.ApplicationID,
+		"payment_id":     req.RazorpayPaymentID,
+		"order_id":       req.RazorpayOrderID,
+		"amount":         applicant.ApplicationFee,
+		"status":         "payment_verified",
+		"verified_at":    now,
+	})
+}
 // ==================== GET RECEIPT ====================
 func GetPaymentReceipt(w http.ResponseWriter, r *http.Request) {
 	id := mux.Vars(r)["id"]

@@ -1447,7 +1447,7 @@ type Applicant struct {
 	AdmissionFee    float64 `gorm:"default:0"`
 	AdmissionFeePaid bool `gorm:"default:false"`
 	AdmissionFeePaymentID *string
-	
+	Payments []ApplicantPayment `gorm:"foreignKey:ApplicationID;references:ApplicationID"`
 	// Document Upload Status
 	DocumentsUploaded bool `gorm:"default:false"`
 	DocumentsVerified bool `gorm:"default:false"`
@@ -1474,7 +1474,47 @@ type Applicant struct {
 func (Applicant) TableName() string {
 	return "admissions.applicants"
 }
+// Tracks application fee payments for applicants (before they become students)
+type ApplicantPayment struct {
+	ID                  uint       `gorm:"primaryKey"`
+	CreatedAt           time.Time
+	UpdatedAt           time.Time
+	
+	// Reference to Applicant
+	ApplicationID       string     `gorm:"index;not null"` // APP-XXXX
+	Applicant           *Applicant `gorm:"foreignKey:ApplicationID;references:ApplicationID"`
+	
+	// Payment Details
+	AmountPaid          float64    `gorm:"type:numeric(12,2)"`
+	Currency            string     `gorm:"default:'INR'"`
+	PaymentMode         string     `gorm:"default:'Online'"` // Online, Offline, Cash, etc.
+	TransactionID       string     `gorm:"index"` // Transaction/Reference ID
+	Gateway             string     `gorm:"default:'Razorpay'"`
+	ReceiptNumber       string     `gorm:"uniqueIndex"`
+	
+	// Razorpay Details
+	RazorpayOrderID     string     `gorm:"index;uniqueIndex:idx_razorpay_order"`
+	RazorpayPaymentID   string     `gorm:"index;uniqueIndex:idx_razorpay_payment"`
+	RazorpaySignature   string
+	
+	// Payment Status
+	Status              string     `gorm:"default:'pending'"` // pending, success, failed
+	IsVerified          bool       `gorm:"default:false"`
+	VerifiedBy          *uint      // Admin user who verified
+	
+	// Timestamps
+	PaymentDate         time.Time
+	PaidAt              *time.Time
+	FailureReason       string
+	
+	// Additional Info
+	Remarks             string
+	PaymentFor          string     `gorm:"default:'application_fee'"` // application_fee, document_verification_fee, etc.
+}
 
+func (ApplicantPayment) TableName() string {
+	return "admissions.applicant_payments"
+}
 // ==================== ADMISSION CYCLE (admissions.admission_cycles) ====================
 // Controls when admissions are open for specific programs
 type AdmissionCycle struct {

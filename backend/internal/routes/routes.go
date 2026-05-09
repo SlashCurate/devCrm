@@ -23,6 +23,9 @@ func SetupRoutes(r *mux.Router) {
 	api.HandleFunc("/auth/forgot-password", handlers.ForgotPassword).Methods("POST", "OPTIONS")
 	api.HandleFunc("/auth/reset-password", handlers.ResetPassword).Methods("POST", "OPTIONS")
 
+	api.HandleFunc("/applications/fee/initiate", handlers.InitiateApplicantApplicationFee).Methods("POST", "OPTIONS")
+	api.HandleFunc("/applications/fee/verify", handlers.VerifyApplicantApplicationFee).Methods("POST", "OPTIONS")
+
 	// OTP & Applicant Registration
 	api.HandleFunc("/auth/send-otp", handlers.SendOTP).Methods("POST", "OPTIONS")
 	api.HandleFunc("/auth/verify-otp", handlers.VerifyOTP).Methods("POST", "OPTIONS")
