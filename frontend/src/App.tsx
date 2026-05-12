@@ -65,6 +65,7 @@ import ApplicantDashboard from "./pages/applicant/Dashboard";
 
 // Shared
 import Notifications from "./pages/Notifications";
+import PaymentSuccess from "./pages/student/PaymentSuccess";
 
 // ── Protected Route ──
 function ProtectedRoute({
@@ -104,6 +105,7 @@ function AppRoutes() {
       
       {/* Public - Application Form (checks sessionStorage for applicant info) */}
       <Route path="/apply" element={<Apply />} />
+      <Route path="/payment/success" element={<PaymentSuccess />} />
       <Route path="/applicant/dashboard" element={<ApplicantDashboard />} />
       <Route path="/forgot-password"    element={<ForgotPassword />} />
       <Route path="/reset-password"  element={<ResetPassword />} />

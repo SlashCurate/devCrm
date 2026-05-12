@@ -401,7 +401,7 @@ export default function Apply() {
             });
             toast.success("Payment successful!");
             setShowPaymentModal(false);
-            window.location.reload();
+            navigate("/payment/success");
           } catch (err: any) {
             setPaymentError("Payment verification failed");
           }
