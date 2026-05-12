@@ -35,8 +35,8 @@ func main() {
 	}
 
 	log.Printf("🚀 University ERP Backend running on :%s", port)
-	log.Println("📚 API Base: http://localhost:" + port + "/api/v1")
-	if err := http.ListenAndServe(":"+port, r); err != nil {
+	log.Println("📚 API Base: http://ServerIP:" + port + "/api/v1")
+	if err := http.ListenAndServe("0.0.0.0:"+port, r); err != nil {
 		log.Fatalf("❌ Server failed: %v", err)
 	}
 }
