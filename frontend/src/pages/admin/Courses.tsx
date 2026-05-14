@@ -16,9 +16,26 @@ export default function AdminCourses() {
   const [selectedCollege, setSelectedCollege] = useState<number | null>(null);
 
   const [loading, setLoading] = useState(true);
+
   const [modal, setModal] = useState(false);
 
-  const { register, handleSubmit, reset } = useForm();
+  // NEW
+  const [departmentModal, setDepartmentModal] = useState(false);
+
+  const {
+    register,
+    handleSubmit,
+    reset,
+    setValue,
+  } = useForm();
+
+  // Department Form
+  const {
+    register: registerDepartment,
+    handleSubmit: handleDepartmentSubmit,
+    reset: resetDepartment,
+    setValue: setDepartmentValue,
+  } = useForm();
 
   const fetchAll = async () => {
     try {
@@ -42,10 +59,12 @@ export default function AdminCourses() {
     fetchAll();
   }, []);
 
+  // FILTER DEPARTMENTS BASED ON COLLEGE
   const filteredDepartments = departments.filter(
-    (d) => Number(d.CollegeID) === Number(selectedCollege)
+    (d) => Number(d.college_id) === Number(selectedCollege)
   );
 
+  // CREATE PROGRAM
   const onSubmit = async (data: any) => {
     try {
       await api.post("/admin/courses", {
@@ -61,6 +80,7 @@ export default function AdminCourses() {
 
       reset();
       setSelectedCollege(null);
+
       setModal(false);
 
       fetchAll();
@@ -69,6 +89,42 @@ export default function AdminCourses() {
     }
   };
 
+  // CREATE DEPARTMENT
+  // CREATE DEPARTMENT
+  const createDepartment = async (data: any) => {
+    try {
+      const res = await api.post("/admin/departments", {
+        name: data.name,
+        code: data.code,
+        college_id: Number(data.college_id),
+      });
+
+      const newDepartment = res.data.data;
+
+      toast.success("Department created!");
+
+      // ADD NEW DEPARTMENT INSTANTLY
+      setDepartments((prev: any) => [
+        ...prev,
+        newDepartment,
+      ]);
+
+      // KEEP SAME COLLEGE SELECTED
+      setSelectedCollege(Number(data.college_id));
+
+      // AUTO SELECT NEW DEPARTMENT
+      setValue("department_id", newDepartment.id);
+
+      resetDepartment();
+
+      setDepartmentModal(false);
+    } catch (err: any) {
+      toast.error(
+        err.response?.data?.error ||
+        "Failed to create department"
+      );
+    }
+  };
   if (loading) {
     return (
       <Layout>
@@ -93,6 +149,7 @@ export default function AdminCourses() {
         }
       />
 
+      {/* PROGRAM CARDS */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
         {programs.map((p) => {
           const filledSeats = p.filled_seats || 0;
@@ -114,14 +171,22 @@ export default function AdminCourses() {
                 </div>
 
                 <div className="flex-1">
-                  <h3 className="font-bold text-gray-900">{p.name}</h3>
+                  <h3 className="font-bold text-gray-900">
+                    {p.name}
+                  </h3>
 
                   <p className="text-sm text-gray-500">
                     Code: {p.code}
                   </p>
 
                   <p className="text-sm text-primary-600 mt-1">
-                    {p.department?.college?.name || "No College"}
+                    {p.department?.college?.name ||
+                      "No College"}
+                  </p>
+
+                  {/* OPTIONAL DEPARTMENT NAME */}
+                  <p className="text-sm text-gray-500">
+                    {p.department?.name}
                   </p>
 
                   <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-gray-500">
@@ -163,6 +228,7 @@ export default function AdminCourses() {
         })}
       </div>
 
+      {/* ADD PROGRAM MODAL */}
       <Modal
         isOpen={modal}
         onClose={() => setModal(false)}
@@ -172,6 +238,7 @@ export default function AdminCourses() {
           onSubmit={handleSubmit(onSubmit)}
           className="space-y-4"
         >
+          {/* PROGRAM NAME + CODE */}
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -181,7 +248,7 @@ export default function AdminCourses() {
               <input
                 {...register("name", { required: true })}
                 className="input-field"
-                placeholder="Computer Science"
+                placeholder="B.Tech Computer Science"
               />
             </div>
 
@@ -193,12 +260,12 @@ export default function AdminCourses() {
               <input
                 {...register("code", { required: true })}
                 className="input-field"
-                placeholder="CS101"
+                placeholder="BTECH-CSE"
               />
             </div>
           </div>
 
-          {/* College Select */}
+          {/* COLLEGE SELECT */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               College
@@ -221,26 +288,83 @@ export default function AdminCourses() {
             </select>
           </div>
 
-          {/* Department Select */}
+          {/* DEPARTMENT SELECT */}
+          {/* DEPARTMENT SELECT */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Department
-            </label>
+            {/* HEADER */}
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-sm font-medium text-gray-700">
+                Department
+              </label>
 
+              {/* ALWAYS SHOW ADD BUTTON WHEN COLLEGE SELECTED */}
+              {selectedCollege && (
+                <button
+                  type="button"
+                  onClick={() => setDepartmentModal(true)}
+                  className="text-sm font-medium text-primary-600 hover:underline"
+                >
+                  + Add Department
+                </button>
+              )}
+            </div>
+
+            {/* DROPDOWN */}
             <select
-              {...register("department_id", { required: true })}
-              className="input-field"
+              {...register("department_id", {
+                required: true,
+              })}
+              className={`input-field ${!selectedCollege || filteredDepartments.length === 0
+                ? "bg-gray-100 cursor-not-allowed"
+                : ""
+                }`}
+              disabled={
+                !selectedCollege ||
+                filteredDepartments.length === 0
+              }
             >
-              <option value="">Select Department</option>
+              <option value="">
+                {!selectedCollege
+                  ? "Select College First"
+                  : filteredDepartments.length === 0
+                    ? "No Departments Available"
+                    : "Select Department"}
+              </option>
 
               {filteredDepartments.map((d) => (
-                <option key={d.ID} value={d.ID}>
-                  {d.Name}
+                <option key={d.id} value={d.id}>
+                  {d.name}
                 </option>
               ))}
             </select>
+
+            {/* EMPTY STATE */}
+            {selectedCollege &&
+              filteredDepartments.length === 0 && (
+                <div className="mt-3 rounded-xl border border-yellow-200 bg-yellow-50 p-4">
+                  <div>
+                    <h4 className="text-sm font-semibold text-yellow-800">
+                      No Departments Found
+                    </h4>
+
+                    <p className="mt-1 text-sm text-yellow-700">
+                      No departments have been created
+                      for the selected college yet.
+                      Click "Add Department" to create one.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+            {/* HELPER */}
+            {!selectedCollege && (
+              <p className="mt-2 text-sm text-gray-500">
+                Please select a college first to view departments.
+              </p>
+            )}
           </div>
 
+          {/* DURATION + SEATS */}
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -248,7 +372,9 @@ export default function AdminCourses() {
               </label>
 
               <input
-                {...register("duration_years", { required: true })}
+                {...register("duration_years", {
+                  required: true,
+                })}
                 type="number"
                 className="input-field"
                 placeholder="4"
@@ -261,14 +387,17 @@ export default function AdminCourses() {
               </label>
 
               <input
-                {...register("total_seats", { required: true })}
+                {...register("total_seats", {
+                  required: true,
+                })}
                 type="number"
                 className="input-field"
-                placeholder="60"
+                placeholder="120"
               />
             </div>
           </div>
 
+          {/* DESCRIPTION */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Description
@@ -278,10 +407,11 @@ export default function AdminCourses() {
               {...register("description")}
               className="input-field"
               rows={3}
-              placeholder="Course description..."
+              placeholder="Program description..."
             />
           </div>
 
+          {/* ACTIONS */}
           <div className="flex gap-3 pt-2">
             <button
               type="submit"
@@ -293,6 +423,89 @@ export default function AdminCourses() {
             <button
               type="button"
               onClick={() => setModal(false)}
+              className="btn-secondary flex-1"
+            >
+              Cancel
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* ADD DEPARTMENT MODAL */}
+      <Modal
+        isOpen={departmentModal}
+        onClose={() => setDepartmentModal(false)}
+        title="Create Department"
+      >
+        <form
+          onSubmit={handleDepartmentSubmit(
+            createDepartment
+          )}
+          className="space-y-4"
+        >
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Department Name
+            </label>
+
+            <input
+              {...registerDepartment("name", {
+                required: true,
+              })}
+              className="input-field"
+              placeholder="Computer Science & Engineering"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Department Code
+            </label>
+
+            <input
+              {...registerDepartment("code", {
+                required: true,
+              })}
+              className="input-field"
+              placeholder="CSE"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              College
+            </label>
+
+            <select
+              {...registerDepartment("college_id", {
+                required: true,
+              })}
+              className="input-field"
+              defaultValue={selectedCollege || ""}
+            >
+              <option value="">Select College</option>
+
+              {colleges.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex gap-3 pt-2">
+            <button
+              type="submit"
+              className="btn-primary flex-1"
+            >
+              Create Department
+            </button>
+
+            <button
+              type="button"
+              onClick={() =>
+                setDepartmentModal(false)
+              }
               className="btn-secondary flex-1"
             >
               Cancel

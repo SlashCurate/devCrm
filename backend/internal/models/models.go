@@ -280,23 +280,29 @@ func (College) TableName() string {
 
 // ==================== DEPARTMENT (core.departments) ====================
 type Department struct {
-	ID              uint `gorm:"primaryKey"`
-	CreatedAt       time.Time
-	UpdatedAt       time.Time
-	CollegeID       uint
-	College         College `gorm:"foreignKey:CollegeID"`
-	Name            string  `gorm:"not null"`
-	Code            string  `gorm:"uniqueIndex;not null"`
-	HODName         string
-	HODUserID       *string `gorm:"type:uuid"`
-	Phone           string
-	Email           string
-	EstablishedYear int
-	About           string
-	IsActive        bool `gorm:"default:true"`
-	// Relations
-	Programs []Program
-	Subjects []Subject
+	ID        uint      `gorm:"primaryKey" json:"id"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+
+	CollegeID uint    `json:"college_id"`
+	College   College `gorm:"foreignKey:CollegeID" json:"college"`
+
+	Name string `gorm:"not null" json:"name"`
+	Code string `gorm:"uniqueIndex;not null" json:"code"`
+
+	HODName   string  `json:"hod_name"`
+	HODUserID *string `gorm:"type:uuid" json:"hod_user_id"`
+
+	Phone string `json:"phone"`
+	Email string `json:"email"`
+
+	EstablishedYear int    `json:"established_year"`
+	About           string `json:"about"`
+
+	IsActive bool `gorm:"default:true" json:"is_active"`
+
+	Programs []Program `json:"programs,omitempty"`
+	Subjects []Subject `json:"subjects,omitempty"`
 }
 
 func (Department) TableName() string {
