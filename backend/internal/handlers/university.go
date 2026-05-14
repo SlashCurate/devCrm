@@ -155,18 +155,69 @@ func UpdateCollege(w http.ResponseWriter, r *http.Request) {
 	utils.JSONResponse(w, http.StatusOK, true, "College updated", college)
 }
 
+// ==================== CREATE DEPARTMENT ====================
+func CreateDepartment(w http.ResponseWriter, r *http.Request) {
+	var department models.Department
+
+	// Decode request body
+	if err := json.NewDecoder(r.Body).Decode(&department); err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	// Basic validation
+	if department.Name == "" ||
+		department.Code == "" ||
+		department.CollegeID == 0 {
+		utils.ErrorResponse(w, http.StatusBadRequest, "Name, code and college_id are required")
+		return
+	}
+
+	// Default active
+	department.IsActive = true
+
+	// Create department
+	if err := db.DB.Create(&department).Error; err != nil {
+		utils.ErrorResponse(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	// Reload with relations
+	db.DB.Preload("College").First(&department, department.ID)
+
+	utils.JSONResponse(w, http.StatusCreated, true, "Department created", department)
+}
+
 // ==================== CREATE COURSE ====================
 func CreateCourse(w http.ResponseWriter, r *http.Request) {
 	var course models.Program
+
+	// Decode request body
 	if err := json.NewDecoder(r.Body).Decode(&course); err != nil {
 		utils.ErrorResponse(w, http.StatusBadRequest, "Invalid request body")
 		return
 	}
-	course.IsActive = true
-	if err := db.DB.Create(&course).Error; err != nil {
-		utils.ErrorResponse(w, http.StatusInternalServerError, "Failed to create course")
+
+	// Basic validation
+	if course.Name == "" ||
+		course.Code == "" ||
+		course.DepartmentID == 0 {
+		utils.ErrorResponse(w, http.StatusBadRequest, "Name, code and department_id are required")
 		return
 	}
+
+	// Default active
+	course.IsActive = true
+
+	// Create course
+	if err := db.DB.Create(&course).Error; err != nil {
+		utils.ErrorResponse(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	// Reload with relations
+	db.DB.Preload("Department.College").First(&course, course.ID)
+
 	utils.JSONResponse(w, http.StatusCreated, true, "Course created", course)
 }
 
@@ -224,7 +275,29 @@ func ListCourses(w http.ResponseWriter, r *http.Request) {
 
 	utils.JSONResponse(w, http.StatusOK, true, "Courses fetched", courses)
 }
+func ListDepartments(w http.ResponseWriter, r *http.Request) {
+	var departments []models.Department
 
+	if err := db.DB.
+		Preload("College").
+		Find(&departments).Error; err != nil {
+
+		utils.ErrorResponse(
+			w,
+			http.StatusInternalServerError,
+			"Failed to fetch departments",
+		)
+		return
+	}
+
+	utils.JSONResponse(
+		w,
+		http.StatusOK,
+		true,
+		"Departments fetched",
+		departments,
+	)
+}
 // ==================== UNIVERSITY DASHBOARD STATS ====================
 func UniversityDashboard(w http.ResponseWriter, r *http.Request) {
 	var totalStudents, totalColleges, totalCourses, pendingApplications, totalFaculty int64

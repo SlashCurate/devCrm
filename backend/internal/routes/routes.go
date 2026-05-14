@@ -41,6 +41,7 @@ func SetupRoutes(r *mux.Router) {
 
 	// Public course/college listing
 	api.HandleFunc("/colleges", handlers.ListColleges).Methods("GET", "OPTIONS")
+	api.HandleFunc("/departments", handlers.ListDepartments).Methods("GET", "OPTIONS")
 	api.HandleFunc("/courses", handlers.ListCourses).Methods("GET", "OPTIONS")
 	api.HandleFunc("/academic-years", handlers.ListAcademicYears).Methods("GET", "OPTIONS")
 	api.HandleFunc("/semesters", handlers.ListSemesters).Methods("GET", "OPTIONS")
@@ -66,6 +67,7 @@ func SetupRoutes(r *mux.Router) {
 	univAdmin.HandleFunc("/admin/users/{id}/toggle", handlers.ToggleUserActive).Methods("PUT", "OPTIONS")
 	univAdmin.HandleFunc("/admin/colleges", handlers.CreateCollege).Methods("POST", "OPTIONS")
 	univAdmin.HandleFunc("/admin/colleges/{id}", handlers.UpdateCollege).Methods("PUT", "OPTIONS")
+	univAdmin.HandleFunc("/admin/departments", handlers.CreateDepartment).Methods("POST", "OPTIONS")
 	univAdmin.HandleFunc("/admin/courses", handlers.CreateCourse).Methods("POST", "OPTIONS")
 	univAdmin.HandleFunc("/admin/applications", handlers.GetAllApplications).Methods("GET", "OPTIONS")
 	univAdmin.HandleFunc("/admin/applications/{id}/shortlist", handlers.ShortlistApplication).Methods("PUT", "OPTIONS")

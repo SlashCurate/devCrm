@@ -43,3 +43,11 @@ docker compose up -d
 
 docker exec -it gateway-nginx sh
 grep -R "univ.demo.local" /etc/nginx check dns link server name and location of the file
+
+
+sudo systemctl enable --now named its active!
+
+docker exec gateway-nginx ls /etc/nginx/ for certs
+
+
+for docker compose up after running it open https://192.168.1.14/login or https://univ.demo.local/login

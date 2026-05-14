@@ -43,7 +43,7 @@ export default function AdminCourses() {
   }, []);
 
   const filteredDepartments = departments.filter(
-    (d) => d.college_id === Number(selectedCollege)
+    (d) => Number(d.CollegeID) === Number(selectedCollege)
   );
 
   const onSubmit = async (data: any) => {
@@ -234,8 +234,8 @@ export default function AdminCourses() {
               <option value="">Select Department</option>
 
               {filteredDepartments.map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.name}
+                <option key={d.ID} value={d.ID}>
+                  {d.Name}
                 </option>
               ))}
             </select>
