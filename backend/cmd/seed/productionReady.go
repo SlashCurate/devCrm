@@ -32,11 +32,11 @@ var DB *gorm.DB
 func initDB() {
 	_ = godotenv.Load()
 	appEnv := getEnv("APP_ENV", "development")
-	host := getEnv("DB_HOST", "192.168.1.201")
+	host := getEnv("DB_HOST", "localhost")
 	port := getEnv("DB_PORT", "5432")
 	user := getEnv("DB_USER", "postgres")
 	password := getEnv("DB_PASSWORD", "root")
-	dbname := getEnv("DB_NAME", "university_erp_prod")
+	dbname := getEnv("DB_NAME", "university_erp_prod1")
 
 	// Production safety check
 	if appEnv == "production" && password == "root" {
