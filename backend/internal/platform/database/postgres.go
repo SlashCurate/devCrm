@@ -3,6 +3,7 @@ package database
 import (
 	"fmt"
 	"log"
+	"strings"
 
 	"university-erp-backend/internal/config"
 	"university-erp-backend/internal/domain"
@@ -143,7 +144,8 @@ func installTriggers(db *gorm.DB) {
 		"hr.employees", "student.students", "finance.invoices",
 	}
 	for _, tbl := range tables {
-		triggerName := fmt.Sprintf("trg_%s_updated_at", tbl)
+		// Replace dot with underscore for trigger name (PostgreSQL doesn't allow dots in trigger names)
+		triggerName := fmt.Sprintf("trg_%s_updated_at", strings.ReplaceAll(tbl, ".", "_"))
 		db.Exec(fmt.Sprintf("DROP TRIGGER IF EXISTS %s ON %s", triggerName, tbl))
 		db.Exec(fmt.Sprintf(
 			"CREATE TRIGGER %s BEFORE UPDATE ON %s FOR EACH ROW EXECUTE FUNCTION shared.update_updated_at()",

@@ -40,7 +40,7 @@ type Config struct {
 // Load reads configuration from environment variables with sensible defaults.
 func Load() *Config {
 	return &Config{
-		DBHost:     env("DB_HOST", "localhost"),
+		DBHost:     env("DB_HOST", "192.168.1.201"),
 		DBPort:     env("DB_PORT", "5432"),
 		DBUser:     env("DB_USER", "postgres"),
 		DBPassword: env("DB_PASSWORD", "root"),

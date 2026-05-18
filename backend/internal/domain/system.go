@@ -1,5 +1,7 @@
 package domain
 
+import "time"
+
 // ─── System Lookups & Reference Data ─────────────────────────────────────────
 
 type Gender struct {
@@ -49,25 +51,25 @@ type Configuration struct {
 func (Configuration) TableName() string { return "system.configurations" }
 
 type Notification struct {
-	ID        uint   `gorm:"primaryKey" json:"id"`
-	UserID    uint   `gorm:"not null;index" json:"user_id"`
-	Title     string `gorm:"not null" json:"title"`
-	Message   string `gorm:"not null" json:"message"`
-	Type      string `gorm:"default:'info';index" json:"type"`
-	IsRead    bool   `gorm:"default:false;index" json:"is_read"`
-	CreatedAt int64  `gorm:"autoCreateTime" json:"created_at"`
+	ID        uint      `gorm:"primaryKey" json:"id"`
+	UserID    uint      `gorm:"not null;index" json:"user_id"`
+	Title     string    `gorm:"not null" json:"title"`
+	Message   string    `gorm:"not null" json:"message"`
+	Type      string    `gorm:"default:'info';index" json:"type"`
+	IsRead    bool      `gorm:"default:false;index" json:"is_read"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 func (Notification) TableName() string { return "system.notifications" }
 
 type ScheduledJob struct {
-	ID           uint   `gorm:"primaryKey" json:"id"`
-	JobName      string `gorm:"unique;not null;index" json:"job_name"`
-	LastRun      *int64 `json:"last_run,omitempty"`
-	NextRun      *int64 `json:"next_run,omitempty"`
-	Status       string `gorm:"type:varchar(20);default:'pending';index" json:"status"`
-	ErrorMessage string `json:"error_message,omitempty"`
-	CreatedAt    int64  `gorm:"autoCreateTime" json:"created_at"`
+	ID           uint       `gorm:"primaryKey" json:"id"`
+	JobName      string     `gorm:"unique;not null;index" json:"job_name"`
+	LastRun      *time.Time `json:"last_run,omitempty"`
+	NextRun      *time.Time `json:"next_run,omitempty"`
+	Status       string     `gorm:"type:varchar(20);default:'pending';index" json:"status"`
+	ErrorMessage string     `json:"error_message,omitempty"`
+	CreatedAt    time.Time  `json:"created_at"`
 }
 
 func (ScheduledJob) TableName() string { return "system.scheduled_jobs" }
