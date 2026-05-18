@@ -28,7 +28,7 @@ func initDB() {
 	port := getEnv("DB_PORT", "5432")
 	user := getEnv("DB_USER", "postgres")
 	password := getEnv("DB_PASSWORD", "root")
-	dbname := getEnv("DB_NAME", "university_erp_prod1")
+	dbname := getEnv("DB_NAME", "university_erp_prod100")
 
 	// Production safety check
 	if appEnv == "production" && password == "root" {

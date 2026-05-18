@@ -6,7 +6,6 @@ require (
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/gorilla/mux v1.8.0
 	github.com/joho/godotenv v1.5.1
-	github.com/razorpay/razorpay-go v1.4.0
 	golang.org/x/crypto v0.17.0
 	gorm.io/driver/postgres v1.5.0
 	gorm.io/gorm v1.25.0
