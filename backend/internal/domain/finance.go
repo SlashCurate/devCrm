@@ -156,3 +156,26 @@ type Refund struct {
 }
 
 func (Refund) TableName() string { return "finance.refunds" }
+
+// ExpenseVoucher records a financial disbursement (e.g. salary payout, vendor payment).
+type ExpenseVoucher struct {
+        ID            uint      `gorm:"primaryKey" json:"id"`
+        VoucherNumber string    `gorm:"unique;not null;index" json:"voucher_number"`
+        Description   string    `json:"description"`
+        Amount        float64   `gorm:"not null" json:"amount"`
+        VoucherDate   time.Time `gorm:"not null;index" json:"voucher_date"`
+        CreatedBy     *uint     `gorm:"index" json:"created_by,omitempty"`
+        CreatedAt     time.Time `json:"created_at"`
+}
+
+func (ExpenseVoucher) TableName() string { return "finance.expense_vouchers" }
+
+// InvoiceNote is for internal notes on an invoice (replaces inline Notes field).
+type InvoiceNote struct {
+        ID        uint      `gorm:"primaryKey" json:"id"`
+        InvoiceID uint      `gorm:"not null;index" json:"invoice_id"`
+        Note      string    `gorm:"not null" json:"note"`
+        CreatedAt time.Time `json:"created_at"`
+}
+
+func (InvoiceNote) TableName() string { return "finance.invoice_notes" }

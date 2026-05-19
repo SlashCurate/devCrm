@@ -1,7 +1,6 @@
 package eventbus
 
 // ─── Event Type Constants ────────────────────────────────────────────────────
-// Every module publishes well-known event types. Other modules subscribe to these.
 
 const (
 	// Auth events
@@ -10,56 +9,56 @@ const (
 	EventPasswordReset  = "user.password_reset"
 
 	// Student events
-	EventStudentEnrolled       = "student.enrolled"
-	EventStudentStatusChanged  = "student.status_changed"
-	EventStudentGraduated      = "student.graduated"
+	EventStudentEnrolled      = "student.enrolled"
+	EventStudentStatusChanged = "student.status_changed"
+	EventStudentGraduated     = "student.graduated"
 
 	// Admission events
-	EventApplicationSubmitted  = "admission.application_submitted"
-	EventApplicationApproved   = "admission.application_approved"
-	EventApplicationRejected   = "admission.application_rejected"
-	EventSeatAllocated         = "admission.seat_allocated"
+	EventApplicationSubmitted = "admission.application_submitted"
+	EventApplicationApproved  = "admission.application_approved"
+	EventApplicationRejected  = "admission.application_rejected"
+	EventSeatAllocated        = "admission.seat_allocated"
 
 	// Finance events
-	EventInvoiceGenerated      = "finance.invoice_generated"
-	EventPaymentCompleted      = "finance.payment_completed"
-	EventPaymentFailed         = "finance.payment_failed"
-	EventRefundProcessed       = "finance.refund_processed"
-	EventFeeOverdue            = "finance.fee_overdue"
+	EventInvoiceGenerated  = "finance.invoice_generated"
+	EventPaymentCompleted  = "finance.payment_completed"
+	EventPaymentFailed     = "finance.payment_failed"
+	EventRefundProcessed   = "finance.refund_processed"
+	EventFeeOverdue        = "finance.fee_overdue"
+	EventLibraryFinePosted = "finance.library_fine_posted"
 
 	// Academic events
-	EventCourseRegistered      = "academic.course_registered"
-	EventTermRegistered        = "academic.term_registered"
-	EventTimetablePublished    = "academic.timetable_published"
+	EventCourseRegistered   = "academic.course_registered"
+	EventTermRegistered     = "academic.term_registered"
+	EventTimetablePublished = "academic.timetable_published"
 
 	// Exam events
-	EventResultPublished       = "exam.result_published"
-	EventRevaluationRequested  = "exam.revaluation_requested"
+	EventResultPublished      = "exam.result_published"
+	EventRevaluationRequested = "exam.revaluation_requested"
 
 	// HR events
-	EventEmployeeOnboarded     = "hr.employee_onboarded"
-	EventLeaveRequested        = "hr.leave_requested"
-	EventLeaveApproved         = "hr.leave_approved"
-	EventPayrollProcessed      = "hr.payroll_processed"
+	EventEmployeeOnboarded = "hr.employee_onboarded"
+	EventLeaveRequested    = "hr.leave_requested"
+	EventLeaveApproved     = "hr.leave_approved"
+	EventPayrollProcessed  = "hr.payroll_processed"
 
 	// Library events
-	EventBookIssued            = "library.book_issued"
-	EventBookReturned          = "library.book_returned"
-	EventBookOverdue           = "library.book_overdue"
+	EventBookIssued   = "library.book_issued"
+	EventBookReturned = "library.book_returned"
+	EventBookOverdue  = "library.book_overdue"
 
 	// Hostel events
-	EventHostelAllocated       = "hostel.allocated"
-	EventMaintenanceRequested  = "hostel.maintenance_requested"
+	EventHostelAllocated      = "hostel.allocated"
+	EventMaintenanceRequested = "hostel.maintenance_requested"
 
 	// Transport events
-	EventTransportPassIssued   = "transport.pass_issued"
+	EventTransportPassIssued = "transport.pass_issued"
 
 	// System events
-	EventNotificationCreated   = "system.notification_created"
+	EventNotificationCreated = "system.notification_created"
 )
 
 // ─── Event Payloads ──────────────────────────────────────────────────────────
-// Concrete payload structs that travel inside Event.Payload.
 
 type StudentEnrolledPayload struct {
 	StudentID  uint   `json:"student_id"`
@@ -88,6 +87,26 @@ type ApplicationApprovedPayload struct {
 	ApplicantID uint   `json:"applicant_id"`
 	ProgramID   uint   `json:"program_id"`
 	Email       string `json:"email"`
+	FirstName   string `json:"first_name"`
+	LastName    string `json:"last_name"`
+	CycleID     uint   `json:"cycle_id"`
+}
+
+type PayrollProcessedPayload struct {
+	PayrollRunID uint    `json:"payroll_run_id"`
+	EmployeeID   uint   `json:"employee_id"`
+	Month        string  `json:"month"`
+	GrossPay     float64 `json:"gross_pay"`
+	NetPay       float64 `json:"net_pay"`
+	ProcessedBy  uint   `json:"processed_by"`
+}
+
+type BookOverduePayload struct {
+	CirculationID uint    `json:"circulation_id"`
+	StudentID     uint    `json:"student_id"`
+	BookCopyID    uint    `json:"book_copy_id"`
+	DaysOverdue   int     `json:"days_overdue"`
+	FineAmount    float64 `json:"fine_amount"`
 }
 
 type NotificationPayload struct {
